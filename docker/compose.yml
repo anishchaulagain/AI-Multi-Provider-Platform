@@ -30,6 +30,8 @@ services:
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       LLM_GATEWAY_URL: http://litellm:4000
       LLM_GATEWAY_KEY: ${LITELLM_MASTER_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      LOG_JSON: "true"
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

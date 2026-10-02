@@ -110,34 +110,38 @@ scripts/               seeding, model pulls, SDK generation, load tests
 
 ## Getting Started
 
-> These steps describe the intended developer workflow. They will work once Phase 1 of the roadmap is complete.
-
 ### Prerequisites
 - Docker + Docker Compose
 - Python 3.12 with [uv](https://docs.astral.sh/uv/)
-- Node.js 20+ with pnpm
+- Node.js 22 with npm
+- `make`. On Windows, install it with `winget install ezwinports.make`, or run the commands in [apps/backend/README.md](apps/backend/README.md) directly.
 - Optional: a GPU for faster local Ollama models
 - Optional: free API keys for OpenRouter, Groq or Gemini
 
 ### Setup
 ```bash
-cp .env.example .env          # add any free-tier API keys you have
-make up                       # start infrastructure + services
-make models                   # pull Ollama models (qwen2.5, mistral, nomic-embed-text)
-make migrate                  # apply database migrations
-make seed                     # load sample documents
-make dev                      # run API, workers and frontend with hot reload
+make env        # create docker/.env, apps/backend/.env, apps/frontend/.env.local
+make install    # uv sync, npm ci, pre-commit hooks
+make up         # start Postgres, Redis, RabbitMQ, Qdrant, Neo4j, MinIO, LiteLLM
+make migrate    # apply database migrations
+make seed       # default tenant + admin@example.com / admin12345
+make dev        # backend :8000 + frontend :3000 with hot reload
 ```
+Then open http://localhost:3000 and sign in.
+
+If a host port is already in use, override it in `docker/.env`, e.g. `POSTGRES_PORT=5433`, and update `DATABASE_URL` in `apps/backend/.env` to match.
 
 ### Common commands
 | Command | Description |
 |---|---|
-| `make up` / `make down` | Start or stop the Docker stack |
-| `make dev` | Run services with hot reload |
-| `make test` | Python unit and integration tests, plus frontend tests |
-| `make lint` | ruff, mypy, eslint |
-| `make eval` | Run the offline evaluation suite against thresholds |
-| `make sdk` | Regenerate the TS SDK from the OpenAPI spec |
+| `make up` / `make down` | Start or stop the infrastructure containers |
+| `make up-all` | Run the full stack, apps included, in Docker |
+| `make dev` | Run the backend and frontend locally with hot reload |
+| `make migrate` / `make migration m="..."` | Apply migrations / create a new one |
+| `make test` | Backend unit and integration tests, plus frontend lint |
+| `make lint` / `make typecheck` | ruff and eslint / mypy and tsc |
+| `make check` | Everything CI runs |
+| `make help` | List all targets |
 
 ### Local endpoints (default)
 | Service | URL |
@@ -170,7 +174,7 @@ The full transcript is always kept in Postgres, so compression never loses data.
 
 ## Roadmap
 
-- [ ] **1. Foundation:** monorepo tooling, Compose stack, core and database libraries, CI
+- [x] **1. Foundation:** database layer and migrations, JWT and API-key auth, rate limiting, logging, readiness checks, CI, login page
 - [ ] **2. AI Gateway:** LiteLLM aliases, fallbacks, circuit breaker, semantic cache, quotas
 - [ ] **3. Ingestion:** upload, queue with retry and DLQ, LlamaIndex pipeline, vector store, live status
 - [ ] **4. GraphRAG:** Neo4j graph, hybrid and graph retrieval, rerank, cited streaming answers
