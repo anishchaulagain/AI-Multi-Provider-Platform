@@ -1,0 +1,25 @@
+# Dev overrides: hot reload with bind-mounted source.
+#
+#   docker compose -f docker/compose.yml -f docker/compose.ports.yml -f docker/compose.dev.yml up
+
+services:
+  backend:
+    build:
+      target: dev
+    environment:
+      DEBUG: "true"
+      WATCHFILES_FORCE_POLLING: "true"   # reliable reload on Windows/macOS bind mounts
+    volumes:
+      - ../apps/backend/app:/app/app
+      - ../apps/backend/tests:/app/tests
+
+  frontend:
+    build:
+      target: dev
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:${BACKEND_PORT:-8000}
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ../apps/frontend:/app
+      - /app/node_modules
+      - /app/.next

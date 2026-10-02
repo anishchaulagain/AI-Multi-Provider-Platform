@@ -1,0 +1,47 @@
+# Host port mappings. Override any port via docker/.env (e.g. POSTGRES_PORT=5433).
+# Format: "<host>:<container>"
+
+services:
+  frontend:
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+
+  backend:
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+
+  litellm:
+    ports:
+      - "${LITELLM_PORT:-4000}:4000"
+
+  ollama:
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+
+  postgres:
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  redis:
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+  rabbitmq:
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"              # AMQP
+      - "${RABBITMQ_UI_PORT:-15672}:15672"         # management UI
+
+  qdrant:
+    ports:
+      - "${QDRANT_HTTP_PORT:-6333}:6333"           # REST + dashboard
+      - "${QDRANT_GRPC_PORT:-6334}:6334"           # gRPC
+
+  neo4j:
+    ports:
+      - "${NEO4J_HTTP_PORT:-7474}:7474"            # browser
+      - "${NEO4J_BOLT_PORT:-7687}:7687"            # bolt
+
+  minio:
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"             # S3 API
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"         # console
