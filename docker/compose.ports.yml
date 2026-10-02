@@ -10,6 +10,10 @@ services:
     ports:
       - "${BACKEND_PORT:-8000}:8000"
 
+  gateway:
+    ports:
+      - "${GATEWAY_PORT:-8100}:8100"
+
   litellm:
     ports:
       - "${LITELLM_PORT:-4000}:4000"

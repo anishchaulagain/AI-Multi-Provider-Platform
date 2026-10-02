@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/app", label: "Overview", icon: LayoutDashboard },
-  { href: "/app/playground", label: "Playground", icon: FlaskConical, soon: true },
+  { href: "/app/playground", label: "Playground", icon: FlaskConical },
   { href: "/app/documents", label: "Documents", icon: FileText, soon: true },
   { href: "/app/chat", label: "Chat", icon: MessagesSquare, soon: true },
   { href: "/app/evals", label: "Evals", icon: BarChart3, soon: true },

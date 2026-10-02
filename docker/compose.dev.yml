@@ -2,16 +2,34 @@
 #
 #   docker compose -f docker/compose.yml -f docker/compose.ports.yml -f docker/compose.dev.yml up
 
+x-python-dev: &python-dev
+  WATCHFILES_FORCE_POLLING: "true"   # reliable reload on Windows/macOS bind mounts
+  DEBUG: "true"
+
 services:
   backend:
     build:
       target: dev
-    environment:
-      DEBUG: "true"
-      WATCHFILES_FORCE_POLLING: "true"   # reliable reload on Windows/macOS bind mounts
+    image: ai-platform-backend-dev
+    environment: *python-dev
     volumes:
-      - ../apps/backend/app:/app/app
-      - ../apps/backend/tests:/app/tests
+      - ../apps/backend/services:/app/services
+      - ../apps/backend/libs:/app/libs
+
+  gateway:
+    build:
+      target: dev
+    image: ai-platform-gateway-dev
+    environment: *python-dev
+    volumes:
+      - ../apps/backend/services:/app/services
+      - ../apps/backend/libs:/app/libs
+
+  migrate:
+    build:
+      target: dev
+    image: ai-platform-backend-dev
+    command: ["alembic", "-c", "/app/libs/db/alembic.ini", "upgrade", "head"]
 
   frontend:
     build:

@@ -1,0 +1,19 @@
+[project]
+name = "platform-db"
+version = "0.1.0"
+description = "SQLAlchemy models, session factory and Alembic migrations"
+requires-python = ">=3.12"
+dependencies = [
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.31.0",
+    "alembic>=1.20.0",
+    "uuid6>=2025.0.1",
+    "platform-core",
+]
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+platform-core = { workspace = true }

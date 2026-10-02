@@ -45,7 +45,7 @@ jobs:
           cache-dependency-glob: apps/backend/uv.lock
 
       - name: Install dependencies
-        run: uv sync --locked
+        run: uv sync --all-packages --locked
 
       - name: Ruff
         run: |
@@ -53,15 +53,25 @@ jobs:
           uv run ruff format --check .
 
       - name: Mypy
-        run: uv run mypy app scripts tests
+        run: |
+          uv run mypy libs/core/src libs/db/src
+          for m in libs/llm_client services/gateway services/api; do
+            (cd $m && uv run mypy --config-file ../../pyproject.toml src tests)
+          done
 
-      - name: Migrations apply cleanly
-        run: uv run alembic upgrade head
+      - name: Migrations apply cleanly and match models
         env:
           DATABASE_URL: postgresql+asyncpg://platform:platform@localhost:5432/platform_test
+        run: |
+          uv run alembic -c libs/db/alembic.ini upgrade head
+          uv run alembic -c libs/db/alembic.ini check
 
       - name: Tests
-        run: uv run pytest -v
+        run: |
+          for m in libs/llm_client services/gateway services/api; do
+            echo "== $m"
+            (cd $m && uv run pytest -v)
+          done
 
   frontend:
     runs-on: ubuntu-latest
@@ -91,15 +101,31 @@ jobs:
           cp docker/.env.example docker/.env
           docker compose -f docker/compose.yml -f docker/compose.ports.yml -f docker/compose.dev.yml config --quiet
       - uses: docker/setup-buildx-action@v3
-      - name: Build backend image
+      - name: Build API image
         uses: docker/build-push-action@v6
         with:
           context: apps/backend
-          file: docker/backend.Dockerfile
+          file: docker/python.Dockerfile
           target: runtime
+          build-args: |
+            PACKAGE=platform-api
+            APP_MODULE=platform_api.main:app
           push: false
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+      - name: Build gateway image
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/backend
+          file: docker/python.Dockerfile
+          target: runtime
+          build-args: |
+            PACKAGE=gateway
+            APP_MODULE=gateway.main:app
+            PORT=8100
+          push: false
+          cache-from: type=gha,scope=gateway
+          cache-to: type=gha,mode=max,scope=gateway
       - name: Build frontend image
         uses: docker/build-push-action@v6
         with:

@@ -1,0 +1,31 @@
+[project]
+name = "platform-api"
+version = "0.1.0"
+description = "Platform API: auth, tenants and the public LLM endpoint"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "platform-core",
+    "platform-db",
+    "llm-client",
+    "pyjwt>=2.15.1",
+    "pwdlib[argon2]>=0.3.1",
+    "aio-pika>=10.1.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+platform-core = { workspace = true }
+platform-db = { workspace = true }
+llm-client = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+markers = ["integration: requires Postgres and Redis"]
