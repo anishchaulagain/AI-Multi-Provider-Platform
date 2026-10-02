@@ -5,7 +5,7 @@
 | `compose.yml` | Base stack: apps, LiteLLM, Ollama, data stores. Publishes **no** host ports. |
 | `compose.ports.yml` | Host port mappings for every service (override via `.env`). |
 | `compose.dev.yml` | Dev overrides: hot reload with bind-mounted source. |
-| `backend.Dockerfile` | FastAPI image (uv, multi-stage: `dev` / `runtime`). |
+| `python.Dockerfile` | One image recipe for every Python service in the uv workspace (`--build-arg PACKAGE=... APP_MODULE=...`; multi-stage `dev` / `runtime`). |
 | `frontend.Dockerfile` | Next.js image (standalone output, multi-stage: `dev` / `runtime`). |
 | `.env.example` | Credentials, optional free-tier LLM keys, host ports. |
 
@@ -43,6 +43,7 @@ Leaving out `compose.ports.yml` keeps every service on the internal Docker netwo
 |---|---|---|
 | Frontend | 3000 | http://localhost:3000 |
 | Backend | 8000 | http://localhost:8000/docs |
+| AI Gateway | 8100 | http://localhost:8100/docs |
 | LiteLLM | 4000 | http://localhost:4000 |
 | Ollama | 11434 | http://localhost:11434 |
 | Postgres | 5432 | — |

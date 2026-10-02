@@ -1,0 +1,87 @@
+# AI Gateway routing table.
+#
+# deployments: one model on one provider. The key must equal a `model_name` in
+#              infra/litellm/config.yaml. `requires_env` skips the deployment when
+#              that API key is unset, so the platform works with zero keys (Ollama only).
+#              `rpm` is the free-tier requests-per-minute; the gateway stops sending
+#              to a deployment once its budget for the minute is spent.
+# aliases:     what callers ask for. Deployments are tried in order; on failure,
+#              rate limit, missing key or an open circuit breaker, the next one is used.
+#
+# Free-tier model IDs change often; check provider docs if a deployment 404s.
+
+deployments:
+  # ---- Groq (free tier) ----
+  groq-llama-3.1-8b:
+    provider: groq
+    rpm: 30
+    context_window: 131072
+    requires_env: GROQ_API_KEY
+  groq-llama-3.3-70b:
+    provider: groq
+    rpm: 30
+    context_window: 131072
+    requires_env: GROQ_API_KEY
+
+  # ---- Google Gemini (free tier) ----
+  gemini-2.5-flash:
+    provider: gemini
+    rpm: 10
+    context_window: 1048576
+    requires_env: GEMINI_API_KEY
+  gemini-2.5-flash-lite:
+    provider: gemini
+    rpm: 15
+    context_window: 1048576
+    requires_env: GEMINI_API_KEY
+
+  # ---- OpenRouter (:free models) ----
+  openrouter-llama-3.3-70b:
+    provider: openrouter
+    rpm: 20
+    context_window: 131072
+    requires_env: OPENROUTER_API_KEY
+  openrouter-mistral-small:
+    provider: openrouter
+    rpm: 20
+    context_window: 32768
+    requires_env: OPENROUTER_API_KEY
+  openrouter-deepseek-v3:
+    provider: openrouter
+    rpm: 20
+    context_window: 65536
+    requires_env: OPENROUTER_API_KEY
+
+  # ---- Ollama (local, no key, no rate limit) ----
+  ollama-qwen2.5-7b:
+    provider: ollama
+    context_window: 32768
+  ollama-mistral-7b:
+    provider: ollama
+    context_window: 32768
+  ollama-nomic-embed:
+    provider: ollama
+    kind: embedding
+
+aliases:
+  chat-fast:
+    description: Low-latency general chat
+    deployments: [groq-llama-3.1-8b, gemini-2.5-flash-lite, openrouter-mistral-small, ollama-qwen2.5-7b]
+  chat-smart:
+    description: Harder questions, longer context
+    deployments: [gemini-2.5-flash, groq-llama-3.3-70b, openrouter-deepseek-v3, openrouter-llama-3.3-70b, ollama-qwen2.5-7b]
+  extract:
+    description: Metadata / entity extraction (JSON)
+    deployments: [ollama-qwen2.5-7b, groq-llama-3.1-8b, gemini-2.5-flash-lite]
+  summarize:
+    description: History compression
+    deployments: [ollama-qwen2.5-7b, groq-llama-3.1-8b, gemini-2.5-flash-lite]
+  judge:
+    # Different model families from the chat answerers where possible, to reduce self-bias.
+    description: LLM-as-judge for evaluations
+    deployments: [gemini-2.5-flash, openrouter-mistral-small, ollama-mistral-7b]
+  embed:
+    # All deployments of an embedding alias must produce the same vector size.
+    kind: embedding
+    description: Text embeddings (768-d)
+    deployments: [ollama-nomic-embed]

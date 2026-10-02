@@ -1,40 +1,59 @@
-# Minimal LiteLLM config. App code should only reference the model_name aliases.
-# Deployments sharing a model_name are load-balanced; fallbacks kick in on failure.
+# LiteLLM is used purely as a provider adapter: one model_name per deployment.
+# Routing, fallbacks, rate limits and circuit breaking live in the AI Gateway
+# (infra/gateway/routes.yaml), so LiteLLM retries/fallbacks are disabled here.
 
 model_list:
-  # ---- chat-fast ----
-  - model_name: chat-fast
-    litellm_params:
-      model: ollama_chat/qwen2.5:7b
-      api_base: os.environ/OLLAMA_API_BASE
-  - model_name: chat-fast-hosted
+  # ---- Groq ----
+  - model_name: groq-llama-3.1-8b
     litellm_params:
       model: groq/llama-3.1-8b-instant
       api_key: os.environ/GROQ_API_KEY
+  - model_name: groq-llama-3.3-70b
+    litellm_params:
+      model: groq/llama-3.3-70b-versatile
+      api_key: os.environ/GROQ_API_KEY
 
-  # ---- chat-smart ----
-  - model_name: chat-smart
+  # ---- Gemini ----
+  - model_name: gemini-2.5-flash
     litellm_params:
-      model: gemini/gemini-2.0-flash
+      model: gemini/gemini-2.5-flash
       api_key: os.environ/GEMINI_API_KEY
-  - model_name: chat-smart-fallback
+  - model_name: gemini-2.5-flash-lite
     litellm_params:
-      model: openrouter/mistralai/mistral-7b-instruct:free
+      model: gemini/gemini-2.5-flash-lite
+      api_key: os.environ/GEMINI_API_KEY
+
+  # ---- OpenRouter (:free) ----
+  - model_name: openrouter-llama-3.3-70b
+    litellm_params:
+      model: openrouter/meta-llama/llama-3.3-70b-instruct:free
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter-mistral-small
+    litellm_params:
+      model: openrouter/mistralai/mistral-small-3.2-24b-instruct:free
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter-deepseek-v3
+    litellm_params:
+      model: openrouter/deepseek/deepseek-chat-v3-0324:free
       api_key: os.environ/OPENROUTER_API_KEY
 
-  # ---- embeddings ----
-  - model_name: embed
+  # ---- Ollama ----
+  - model_name: ollama-qwen2.5-7b
+    litellm_params:
+      model: ollama_chat/qwen2.5:7b
+      api_base: os.environ/OLLAMA_API_BASE
+  - model_name: ollama-mistral-7b
+    litellm_params:
+      model: ollama_chat/mistral:7b
+      api_base: os.environ/OLLAMA_API_BASE
+  - model_name: ollama-nomic-embed
     litellm_params:
       model: ollama/nomic-embed-text
       api_base: os.environ/OLLAMA_API_BASE
 
 router_settings:
-  routing_strategy: simple-shuffle
-  num_retries: 2
-  timeout: 60
-  fallbacks:
-    - chat-fast: ["chat-fast-hosted"]
-    - chat-smart: ["chat-smart-fallback", "chat-fast"]
+  num_retries: 0
+  timeout: 120
 
 litellm_settings:
   drop_params: true
