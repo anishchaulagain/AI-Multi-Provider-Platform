@@ -1,5 +1,6 @@
 # Local planning docs
 docs/PLAN.md
+docs/PHASES.md
 
 # Env / secrets
 .env
