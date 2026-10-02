@@ -1,0 +1,40 @@
+# Local planning docs
+docs/PLAN.md
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.turbo/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+playwright-report/
+test-results/
+
+# Data volumes
+docker/data/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
