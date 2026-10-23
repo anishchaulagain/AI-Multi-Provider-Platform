@@ -206,6 +206,15 @@ def test_rrf_fuse() -> None:
 
 
 # ---------- answering ----------
+def test_parse_full_width_citations() -> None:
+    assert parse_citations("Helm is in Rust【1】. Atlas runs Helm【2】【1】 and 【3，4】.") == [
+        1,
+        2,
+        3,
+        4,
+    ]
+
+
 def test_parse_citations() -> None:
     text = "Qdrant is in Rust [2]. It supports hybrid search [1, 3][2]. Not [x] or [ 9 ]."
     assert parse_citations(text) == [2, 1, 3]

@@ -22,7 +22,9 @@ after the statement they support. Cite only source numbers that appear below.
 hints, but cite the numbered source that states the fact.
 - Be concise. Use the language of the question."""
 
-_CITATION = re.compile(r"\[(\d{1,3}(?:\s*,\s*\d{1,3})*)\]")
+# [1], [1, 2] and the full-width 【1】 some models (e.g. gpt-oss) emit.
+_CITATION = re.compile(r"[\[【](\d{1,3}(?:\s*[,，、]\s*\d{1,3})*)[\]】]")
+_SEPARATORS = re.compile(r"[,，、]")
 _SNIPPET_CHARS = 280
 
 
@@ -94,7 +96,7 @@ def parse_citations(text: str) -> list[int]:
     """Source numbers in order of first appearance: "[1][3]" and "[1, 3]" both count."""
     seen: list[int] = []
     for match in _CITATION.finditer(text):
-        for part in match.group(1).split(","):
+        for part in _SEPARATORS.split(match.group(1)):
             n = int(part.strip())
             if n not in seen:
                 seen.append(n)

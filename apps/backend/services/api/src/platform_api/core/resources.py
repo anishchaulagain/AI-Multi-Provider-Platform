@@ -94,6 +94,7 @@ async def lifespan_resources(
         graph=graph,
         reranker=reranker,
         config=RetrievalConfig(
+            embed_alias=settings.embed_alias,
             query_prefix=settings.embed_query_prefix,
             rewrite_alias=settings.rewrite_alias,
             candidates=settings.retrieval_candidates,

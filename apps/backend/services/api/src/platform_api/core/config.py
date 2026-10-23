@@ -31,6 +31,8 @@ class Settings(BaseServiceSettings):
     max_upload_mb: int = 25
     # Names the Qdrant chunk collection; must match the ingestion worker's.
     embed_model_name: str = "nomic-embed-text"
+    # Gateway alias for query embeddings; must match the worker's EMBED_ALIAS.
+    embed_alias: str = "embed"
 
     # Chat / retrieval
     answer_alias: str = "chat-smart"

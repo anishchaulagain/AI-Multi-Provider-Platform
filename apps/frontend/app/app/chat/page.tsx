@@ -40,7 +40,8 @@ type UiMessage = Message & {
   error?: string;
 };
 
-const CITATION = /\[(\d{1,3}(?:\s*,\s*\d{1,3})*)\]/g;
+// [1], [1, 2] and the full-width 【1】 some models emit (same rule as the API).
+const CITATION = /[\[【](\d{1,3}(?:\s*[,，、]\s*\d{1,3})*)[\]】]/g;
 
 /** Render answer text with [n] markers as buttons that open the cited source. */
 function AnswerText({
@@ -57,7 +58,7 @@ function AnswerText({
   let last = 0;
   for (const match of text.matchAll(CITATION)) {
     parts.push(text.slice(last, match.index));
-    const numbers = match[1].split(",").map((n) => Number(n.trim()));
+    const numbers = match[1].split(/[,，、]/).map((n) => Number(n.trim()));
     parts.push(
       <span key={match.index} className="whitespace-nowrap">
         {numbers.map((n) => {
