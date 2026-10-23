@@ -1,3 +1,4 @@
+import json
 import uuid
 from collections.abc import AsyncGenerator
 
@@ -10,7 +11,7 @@ from llm_client import Caller, GatewayClient, GatewayError
 from platform_rag.formats import DocumentParseError
 from platform_rag.ingest import IngestionPipeline, PipelineConfig
 from platform_rag.ingest.pipeline import Stage
-from platform_rag.store import ChunkStore, collection_name
+from platform_rag.store import ChunkStore, chunk_point_id, collection_name
 
 TENANT = uuid.uuid4()
 
@@ -167,3 +168,76 @@ async def test_errors_propagate_for_the_worker_to_classify(
             ("word " * 500).encode(),
             "big.txt",
         )
+
+
+class RecordingGraph:
+    def __init__(self, fail: bool = False) -> None:
+        self.fail = fail
+        self.calls: list[dict[str, object]] = []
+
+    async def replace_document(self, **kwargs: object) -> None:
+        if self.fail:
+            raise ConnectionError("neo4j down")
+        self.calls.append(kwargs)
+
+
+async def test_graph_stage_writes_extraction(qdrant: AsyncQdrantClient, fake: FakeGateway) -> None:
+    fake.chat_reply = json.dumps(
+        {
+            "chunks": [
+                {
+                    "chunk": 0,
+                    "entities": [
+                        {"name": "Qdrant", "type": "Product"},
+                        {"name": "Rust", "type": "Technology"},
+                    ],
+                    "relations": [{"source": "Qdrant", "type": "USES", "target": "Rust"}],
+                }
+            ],
+            # The metadata call reuses this reply; extra keys are ignored by it.
+            "summary": "About Qdrant.",
+            "keywords": ["qdrant"],
+        }
+    )
+    graph = RecordingGraph()
+    gateway = GatewayClient(
+        "http://gw", "t", transport=httpx.MockTransport(fake.handler), max_retries=0
+    )
+    pipeline = IngestionPipeline(gateway, ChunkStore(qdrant, "fake-embed"), graph=graph)
+    doc_id = uuid.uuid4()
+    stages = await _run(pipeline, doc_id, b"Qdrant is written in Rust.", "q.txt")
+
+    assert stages == ["parsing", "chunking", "embedding", "graphing"]
+    [call] = graph.calls
+    assert call["doc_id"] == doc_id
+    chunks = call["chunks"]
+    assert [c.chunk_id for c in chunks] == [chunk_point_id(doc_id, 0)]  # type: ignore[attr-defined]
+    extraction = call["extraction"]
+    assert extraction.entity_count == 2  # type: ignore[attr-defined]
+
+
+async def test_graph_failure_does_not_fail_the_document(
+    qdrant: AsyncQdrantClient, fake: FakeGateway
+) -> None:
+    gateway = GatewayClient(
+        "http://gw", "t", transport=httpx.MockTransport(fake.handler), max_retries=0
+    )
+    pipeline = IngestionPipeline(
+        gateway, ChunkStore(qdrant, "fake-embed"), graph=RecordingGraph(fail=True)
+    )
+    stages: list[Stage] = []
+
+    async def on_stage(stage: Stage) -> None:
+        stages.append(stage)
+
+    result = await pipeline.run(
+        tenant_id=TENANT,
+        doc_id=uuid.uuid4(),
+        filename="a.txt",
+        data=b"Some text.",
+        caller=Caller(tenant_id=TENANT),
+        on_stage=on_stage,
+    )
+    assert result.details["graph"]["status"] == "failed"
+    assert "neo4j down" in result.details["graph"]["error"]
+    assert result.chunk_count == 1

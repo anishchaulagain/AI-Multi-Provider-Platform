@@ -8,6 +8,7 @@ import asyncio
 import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import Any
 
 import asyncpg
 import httpx
@@ -133,15 +134,29 @@ def fake_gateway() -> FakeGateway:
 
 
 @pytest.fixture
+async def qdrant() -> AsyncGenerator[AsyncQdrantClient]:
+    client = AsyncQdrantClient(":memory:")
+    yield client
+    await client.close()
+
+
+@pytest.fixture
+def graph() -> Any:
+    """Override with a fake GraphStore in tests that need the knowledge graph."""
+    return None
+
+
+@pytest.fixture
 async def client(
-    settings: Settings, fake_gateway: FakeGateway
+    settings: Settings, fake_gateway: FakeGateway, qdrant: AsyncQdrantClient, graph: Any
 ) -> AsyncGenerator[httpx.AsyncClient]:
     app = create_app(
         settings,
         overrides=Overrides(
             gateway_transport=httpx.MockTransport(fake_gateway.handler),
             blobs=InMemoryBlobStore(),
-            qdrant=AsyncQdrantClient(":memory:"),
+            qdrant=qdrant,
+            graph=graph,
         ),
     )
     async for c in make_client(app):

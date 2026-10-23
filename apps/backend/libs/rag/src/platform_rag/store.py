@@ -7,6 +7,7 @@ named sparse vector ("bm25", IDF applied server-side). Point ids are derived fro
 
 import re
 import uuid
+from collections.abc import Sequence
 from typing import Any
 
 import structlog
@@ -62,20 +63,52 @@ class ChunkRecord(BaseModel):
 
 class StoredChunk(BaseModel):
     id: str
+    doc_id: str = ""
     chunk_index: int
     text: str
     page: int | None = None
     section: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    score: float | None = None
+
+    @property
+    def doc_title(self) -> str:
+        return str(self.metadata.get("doc_title") or self.metadata.get("filename") or "")
 
 
-def _scope(tenant_id: uuid.UUID, doc_id: uuid.UUID | None = None) -> models.Filter:
+def _scope(
+    tenant_id: uuid.UUID,
+    doc_id: uuid.UUID | None = None,
+    *,
+    doc_ids: Sequence[uuid.UUID | str] | None = None,
+) -> models.Filter:
     must: list[models.Condition] = [
         models.FieldCondition(key="tenant_id", match=models.MatchValue(value=str(tenant_id)))
     ]
     if doc_id is not None:
         must.append(models.FieldCondition(key="doc_id", match=models.MatchValue(value=str(doc_id))))
+    if doc_ids:
+        must.append(
+            models.FieldCondition(
+                key="doc_id", match=models.MatchAny(any=[str(d) for d in doc_ids])
+            )
+        )
     return models.Filter(must=must)
+
+
+def _to_chunk(point: models.Record | models.ScoredPoint) -> StoredChunk:
+    payload = dict(point.payload or {})
+    payload.pop("tenant_id", None)
+    return StoredChunk(
+        id=str(point.id),
+        doc_id=str(payload.pop("doc_id", "")),
+        chunk_index=int(payload.pop("chunk_index", 0)),
+        text=str(payload.pop("text", "")),
+        page=payload.pop("page", None),
+        section=payload.pop("section", None),
+        metadata=payload,
+        score=getattr(point, "score", None),
+    )
 
 
 class ChunkStore:
@@ -169,20 +202,64 @@ class ChunkStore:
         points, _ = await self._client.scroll(
             self.collection, scroll_filter=scope, limit=limit, with_payload=True
         )
-        out = []
-        for point in points:
-            payload = dict(point.payload or {})
-            out.append(
-                StoredChunk(
-                    id=str(point.id),
-                    chunk_index=int(payload.pop("chunk_index")),
-                    text=str(payload.pop("text", "")),
-                    page=payload.pop("page", None),
-                    section=payload.pop("section", None),
-                    metadata={k: v for k, v in payload.items() if k not in ("tenant_id", "doc_id")},
+        return sorted((_to_chunk(p) for p in points), key=lambda c: c.chunk_index)
+
+    async def hybrid_search(
+        self,
+        tenant_id: uuid.UUID,
+        *,
+        dense: list[float],
+        sparse: SparseVector | None,
+        doc_ids: Sequence[uuid.UUID | str] | None = None,
+        limit: int = 30,
+    ) -> list[StoredChunk]:
+        """Dense + BM25 candidates fused server-side with reciprocal rank fusion."""
+        if not await self._exists():
+            return []
+        scope = _scope(tenant_id, doc_ids=doc_ids)
+        prefetch = [models.Prefetch(query=dense, using=DENSE, filter=scope, limit=limit)]
+        if sparse is not None and sparse.indices:
+            prefetch.append(
+                models.Prefetch(
+                    query=models.SparseVector(**sparse.model_dump()),
+                    using=SPARSE,
+                    filter=scope,
+                    limit=limit,
                 )
             )
-        return sorted(out, key=lambda c: c.chunk_index)
+        result = await self._client.query_points(
+            self.collection,
+            prefetch=prefetch,
+            query=models.FusionQuery(fusion=models.Fusion.RRF),
+            query_filter=scope,
+            limit=limit,
+            with_payload=True,
+        )
+        return [_to_chunk(p) for p in result.points]
+
+    async def get_chunks(self, tenant_id: uuid.UUID, ids: Sequence[str]) -> list[StoredChunk]:
+        """Chunks by point id, in the order given; other tenants' ids are dropped."""
+        if not ids or not await self._exists():
+            return []
+        records = await self._client.retrieve(self.collection, ids=list(ids), with_payload=True)
+        by_id = {
+            str(r.id): _to_chunk(r)
+            for r in records
+            if (r.payload or {}).get("tenant_id") == str(tenant_id)
+        }
+        return [by_id[i] for i in ids if i in by_id]
+
+    async def neighbors(
+        self, tenant_id: uuid.UUID, chunk: StoredChunk, *, window: int = 1
+    ) -> list[StoredChunk]:
+        """The chunks just before and after `chunk` in its document."""
+        doc = uuid.UUID(chunk.doc_id)
+        ids = [
+            chunk_point_id(doc, i)
+            for i in range(chunk.chunk_index - window, chunk.chunk_index + window + 1)
+            if i >= 0 and i != chunk.chunk_index
+        ]
+        return await self.get_chunks(tenant_id, ids)
 
     async def ping(self) -> None:
         await self._client.get_collections()

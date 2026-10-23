@@ -32,6 +32,22 @@ class Settings(BaseServiceSettings):
     # Names the Qdrant chunk collection; must match the ingestion worker's.
     embed_model_name: str = "nomic-embed-text"
 
+    # Chat / retrieval
+    answer_alias: str = "chat-smart"
+    rewrite_alias: str = "chat-fast"
+    answer_temperature: float = 0.2
+    answer_max_tokens: int = 800
+    embed_query_prefix: str = "search_query: "
+    retrieval_candidates: int = 30
+    retrieval_final_k: int = 8
+    retrieval_graph_hops: int = 1
+    retrieval_context_tokens: int = 3000
+    # Knowledge-graph expansion at query time (needs Neo4j; skipped when down).
+    graph_enabled: bool = True
+    # Cross-encoder reranking: "fastembed" (downloads the model on first use) or "none".
+    reranker: str = "fastembed"
+    reranker_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
+
     # AI Gateway (internal)
     gateway_url: str = "http://localhost:8100"
     gateway_service_token: SecretStr = SecretStr("dev-gateway-token-change-me")

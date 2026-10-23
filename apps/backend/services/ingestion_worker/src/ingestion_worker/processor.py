@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from llm_client import Caller, GatewayError
 from platform_core.storage import BlobNotFoundError, BlobStore
 from platform_db.models import Document, DocumentStatus
+from platform_graph import GraphStore
 from platform_messaging import Delivery, IngestDocumentJob, PermanentError
 from platform_messaging.events import DocumentEvent, publish_document_event
 from platform_rag.formats import DocumentParseError, UnsupportedFormatError
@@ -37,12 +38,14 @@ class DocumentProcessor:
         redis: Redis,
         blobs: BlobStore,
         store: ChunkStore,
+        graph: GraphStore | None = None,
         pipeline: IngestionPipeline,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._redis = redis
         self._blobs = blobs
         self._store = store
+        self._graph = graph
         self._pipeline = pipeline
 
     # ---------- status ----------
@@ -114,7 +117,7 @@ class DocumentProcessor:
             )
         except _DocumentDeletedError:
             log.info("document_deleted_mid_job")
-            await self._store.delete_document(job.tenant_id, job.doc_id)
+            await self._cleanup(job)
             return
         except BlobNotFoundError as exc:
             raise PermanentError("The uploaded file is missing from storage") from exc
@@ -136,7 +139,13 @@ class DocumentProcessor:
             ingested_at=datetime.now(UTC),
         )
         if not finished:  # deleted between the last stage and now
-            await self._store.delete_document(job.tenant_id, job.doc_id)
+            await self._cleanup(job)
+
+    async def _cleanup(self, job: IngestDocumentJob) -> None:
+        """The document was deleted while we worked on it: remove what we wrote."""
+        await self._store.delete_document(job.tenant_id, job.doc_id)
+        if self._graph is not None:
+            await self._graph.delete_document(job.tenant_id, job.doc_id)
 
     async def on_failure(
         self,

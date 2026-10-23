@@ -23,7 +23,7 @@ const NAV = [
   { href: "/app", label: "Overview", icon: LayoutDashboard },
   { href: "/app/playground", label: "Playground", icon: FlaskConical },
   { href: "/app/documents", label: "Documents", icon: FileText },
-  { href: "/app/chat", label: "Chat", icon: MessagesSquare, soon: true },
+  { href: "/app/chat", label: "Chat", icon: MessagesSquare },
   { href: "/app/evals", label: "Evals", icon: BarChart3, soon: true },
   { href: "/app/api-keys", label: "API keys", icon: KeyRound },
 ];

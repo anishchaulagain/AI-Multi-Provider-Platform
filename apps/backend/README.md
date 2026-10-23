@@ -11,7 +11,9 @@ libs/
                (retries, streaming, judge() for structured JSON answers)
   messaging/   platform_messaging: RabbitMQ topology, publisher, retrying consumer,
                job contracts, Redis status events, trace headers
-  rag/         platform_rag: Qdrant chunk store, format sniffing; [ingest] extra adds
+  graph/       platform_graph: Neo4j schema, tenant-scoped graph store, entity/relation extraction
+  rag/         platform_rag: Qdrant chunk store, BM25, hybrid retrieval, reranking (`[rerank]`),
+               cited-answer prompt and citation validation; [ingest] extra adds
                parsing, chunking, BM25, metadata extraction and the ingestion pipeline
 services/
   api/               platform_api: Platform API (auth, API keys, documents, LLM endpoints, usage)
@@ -63,6 +65,10 @@ uv run python -m ingestion_worker
 | `POST /api/v1/documents/{id}/reingest` | Re-run ingestion for a `ready` or `failed` document |
 | `GET /api/v1/documents/{id}/chunks` | Chunk preview (text, page, section) |
 | `GET /api/v1/documents/{id}/events`, `GET /api/v1/documents/events` | SSE status stream for one document / the whole tenant |
+| `POST/GET /api/v1/conversations`, `GET/PATCH/DELETE /api/v1/conversations/{id}` | Conversations (private to their user), with an optional `doc_ids` filter |
+| `GET /api/v1/conversations/{id}/messages` | Turns, with citations resolved to the cited chunk text |
+| `POST /api/v1/conversations/{id}/chat` | Grounded answer over SSE: `token`…, `citations`, `usage`, `done` |
+| `GET /api/v1/graph/entities?q=`, `GET /api/v1/graph/neighborhood/{entity_id}?hops=1` | Entity search and subgraph for the explorer |
 
 The LLM endpoints work with the OpenAI SDKs:
 
@@ -107,6 +113,20 @@ status changes: Postgres (source of truth) + Redis pub/sub -> SSE
 - **Idempotent:** chunk ids derive from `(doc_id, chunk_index)` and a re-ingest replaces the document's points. Uploads are deduplicated per tenant by SHA-256.
 - **Chunks:** markdown, DOCX and HTML split on headings first, so each chunk carries its section path. PDF chunks never span pages. Each chunk is embedded with its document title and section as a header.
 
+### Retrieval and cited answers
+
+```
+question -> rewrite to a standalone query (chat-fast, last two turns)
+         -> Qdrant dense + BM25, server-side RRF (top 30) ┐
+         -> Neo4j: full-text match entities -> 1-2 hops  ┘-> RRF -> cross-encoder rerank
+         -> top 8 within the token budget, + neighboring chunks -> numbered [n] sources + graph facts
+         -> chat-smart streams the answer -> citations parsed; numbers outside the sources dropped
+```
+
+- **Graph:** the worker's `graphing` stage writes `(Document)-[:HAS_CHUNK]->(Chunk)-[:MENTIONS]->(Entity)-[:RELATES {type, doc_id}]->(Entity)` and `[:NEXT]` chain edges. Entities with the same normalized name and type are merged. Facts carry their `doc_id`, so deleting or re-ingesting a document removes exactly its facts, and entities nothing mentions anymore are deleted.
+- **Persistence:** messages store citations as chunk ids only (never context text), plus the retrieval trace (rewritten query, ranks and scores, graph seeds and facts, timings) and token usage.
+- **Degrading gracefully:** if Neo4j is down, answers come from vectors alone; if the reranker fails, the fused order is kept. Both cases are recorded in the trace.
+
 ## Test & lint
 
 Each member runs its own tests:
@@ -116,7 +136,8 @@ Each member runs its own tests:
 (cd services/gateway && uv run pytest)    # no services needed (fake LiteLLM + fakeredis)
 (cd services/api && uv run pytest)        # integration tests skip if Postgres/Redis are down
 (cd libs/messaging && uv run pytest)      # retry/DLQ/redelivery against real RabbitMQ (skips if down)
-(cd libs/rag && uv run pytest)            # parsing, chunking, BM25, pipeline (in-memory Qdrant)
+(cd libs/graph && uv run pytest)          # extraction; graph store against real Neo4j (skips if down)
+(cd libs/rag && uv run pytest)            # parsing, chunking, BM25, pipeline, retrieval, citations, golden corpus
 (cd services/ingestion_worker && uv run pytest)  # end-to-end: API -> RabbitMQ -> worker -> Qdrant
 uv run ruff check . && uv run ruff format --check .
 ```

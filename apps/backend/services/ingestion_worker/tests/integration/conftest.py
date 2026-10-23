@@ -9,6 +9,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import uuid
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
@@ -35,11 +36,13 @@ from platform_api.repositories import tenants as tenants_repo
 from platform_api.repositories import users as users_repo
 from platform_db.models import UserRole
 from platform_db.session import create_engine, create_sessionmaker
+from platform_graph import GraphStore
 
 pytestmark = pytest.mark.integration
 
 BACKEND_DIR = Path(__file__).resolve().parents[4]
 TAG = f"test-{uuid.uuid4().hex[:8]}"
+TENANTS: list[str] = []  # graph nodes are removed per tenant at teardown
 EMAIL, PASSWORD = "ingest-admin@example.com", "admin12345"
 
 ENV: dict[str, Any] = {
@@ -57,6 +60,10 @@ ENV: dict[str, Any] = {
     "ingest_exchange": TAG,
     "ingest_retry_delays_ms": (300, 600),
     "embed_model_name": TAG,
+    "neo4j_uri": os.getenv("TEST_NEO4J_URI", "bolt://localhost:7687"),
+    "neo4j_user": os.getenv("TEST_NEO4J_USER", "neo4j"),
+    "neo4j_password": os.getenv("TEST_NEO4J_PASSWORD", "platform-neo4j"),
+    "reranker": "none",
     "environment": "test",
 }
 
@@ -100,7 +107,29 @@ class FakeGateway:
                     ]
                 },
             )
-        reply = json.dumps({"summary": "A test document.", "keywords": ["test", "ingestion"]})
+        prompt = json.dumps(body["messages"])
+        if "knowledge graph" in prompt:
+            # One entity pair per chunk: "Retrieval" uses "Vectors".
+            numbers = sorted({int(n) for n in re.findall(r"\[chunk (\d+)\]", prompt)})
+            reply = json.dumps(
+                {
+                    "chunks": [
+                        {
+                            "chunk": n,
+                            "entities": [
+                                {"name": "Retrieval", "type": "Concept"},
+                                {"name": "Vectors", "type": "Technology"},
+                            ],
+                            "relations": [
+                                {"source": "Retrieval", "type": "USES", "target": "Vectors"}
+                            ],
+                        }
+                        for n in numbers
+                    ]
+                }
+            )
+        else:
+            reply = json.dumps({"summary": "A test document.", "keywords": ["test", "ingestion"]})
         return httpx.Response(
             200, json={"choices": [{"message": {"role": "assistant", "content": reply}}]}
         )
@@ -121,6 +150,7 @@ async def _reachable() -> str | None:
         "rabbitmq": lambda: aio_pika.connect(ENV["rabbitmq_url"], timeout=3),
         "qdrant": lambda: AsyncQdrantClient(url=ENV["qdrant_url"], timeout=3).get_collections(),
         "minio": lambda: asyncio.to_thread(_minio().list_buckets),
+        "neo4j": _neo4j_ping,
     }
     for name, check in checks.items():
         try:
@@ -130,6 +160,14 @@ async def _reachable() -> str | None:
         except Exception as exc:  # noqa: BLE001
             return f"{name} unavailable: {exc!r}"
     return None
+
+
+async def _neo4j_ping() -> None:
+    graph = GraphStore.connect(ENV["neo4j_uri"], ENV["neo4j_user"], ENV["neo4j_password"])
+    try:
+        await graph.ping()
+    finally:
+        await graph.close()
 
 
 def _minio() -> Minio:
@@ -173,6 +211,9 @@ async def infra() -> AsyncGenerator[None]:
             await channel.queue_delete(queue)
         for exchange in (TAG, f"{TAG}.retry", f"{TAG}.dlx"):
             await channel.exchange_delete(exchange)
+    graph = GraphStore.connect(ENV["neo4j_uri"], ENV["neo4j_user"], ENV["neo4j_password"])
+    await graph._run("MATCH (n) WHERE n.tenant_id IN $t DETACH DELETE n", t=TENANTS)
+    await graph.close()
     qdrant = AsyncQdrantClient(url=ENV["qdrant_url"])
     for collection in (await qdrant.get_collections()).collections:
         if collection.name.startswith("chunks_test_"):
@@ -199,6 +240,7 @@ async def seeded(infra: None) -> AsyncGenerator[None]:
     engine = create_engine(ENV["database_url"])
     async with create_sessionmaker(engine)() as session:
         tenant = await tenants_repo.create(session, name="ingest-tenant")
+        TENANTS.append(str(tenant.id))
         await users_repo.create(
             session,
             tenant_id=tenant.id,

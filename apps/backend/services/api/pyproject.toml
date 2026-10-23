@@ -10,7 +10,8 @@ dependencies = [
     "platform-db",
     "llm-client",
     "platform-messaging",
-    "platform-rag",
+    "platform-rag[rerank]",
+    "platform-graph",
     "python-multipart>=0.0.9",
     "pyjwt>=2.15.1",
     "pwdlib[argon2]>=0.3.1",
@@ -27,6 +28,7 @@ platform-db = { workspace = true }
 llm-client = { workspace = true }
 platform-messaging = { workspace = true }
 platform-rag = { workspace = true }
+platform-graph = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

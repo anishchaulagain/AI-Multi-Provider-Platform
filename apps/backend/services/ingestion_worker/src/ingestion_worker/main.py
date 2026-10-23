@@ -15,6 +15,7 @@ from llm_client import GatewayClient
 from platform_core.logging import configure_logging
 from platform_core.storage import BlobStore, MinioBlobStore
 from platform_db.session import create_engine, create_sessionmaker
+from platform_graph import GraphStore
 from platform_messaging import IngestDocumentJob, RetryingConsumer
 from platform_rag.ingest import IngestionPipeline, PipelineConfig
 from platform_rag.store import ChunkStore
@@ -35,6 +36,7 @@ async def build_worker(
     gateway_transport: httpx.AsyncBaseTransport | None = None,
     blobs: BlobStore | None = None,
     qdrant: AsyncQdrantClient | None = None,
+    graph: GraphStore | None = None,
 ) -> AsyncGenerator[Worker]:
     engine = create_engine(settings.database_url, pool_size=2)
     redis = Redis.from_url(settings.redis_url, decode_responses=True)
@@ -46,6 +48,15 @@ async def build_worker(
         transport=gateway_transport,
     )
     store = ChunkStore(qdrant_client, settings.embed_model_name)
+    graph_store: GraphStore | None = graph
+    if graph_store is None and settings.graph_extraction:
+        graph_store = GraphStore.connect(
+            settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password.get_secret_value()
+        )
+        try:
+            await asyncio.wait_for(graph_store.ensure_schema(), timeout=15)
+        except Exception as exc:  # noqa: BLE001 - Neo4j may come up later; writes retry it
+            logger.warning("graph_schema_init_failed", error=repr(exc))
     processor = DocumentProcessor(
         sessionmaker=create_sessionmaker(engine),
         redis=redis,
@@ -57,9 +68,11 @@ async def build_worker(
             settings.s3_bucket,
         ),
         store=store,
+        graph=graph_store,
         pipeline=IngestionPipeline(
             gateway,
             store,
+            graph=graph_store,
             config=PipelineConfig(
                 chunk_size=settings.chunk_size,
                 chunk_overlap=settings.chunk_overlap,
@@ -69,6 +82,10 @@ async def build_worker(
                 extract_metadata=settings.extract_metadata,
                 extract_alias=settings.extract_alias,
                 max_chunks=settings.max_chunks,
+                graph_extraction=settings.graph_extraction,
+                graph_alias=settings.graph_alias,
+                graph_batch_chars=settings.graph_batch_chars,
+                graph_max_chunks=settings.graph_max_chunks,
             ),
         ),
     )
@@ -85,6 +102,8 @@ async def build_worker(
         yield Worker(processor=processor, consumer=consumer)
     finally:
         await gateway.aclose()
+        if graph is None and graph_store is not None:
+            await graph_store.close()
         if qdrant is None:
             await qdrant_client.close()
         await redis.aclose()

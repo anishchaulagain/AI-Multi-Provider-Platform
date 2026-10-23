@@ -419,6 +419,111 @@ async function watchDocuments(
   }
 }
 
+// ---------- Conversations ----------
+export type Conversation = {
+  id: string;
+  title: string;
+  doc_ids: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type Citation = {
+  n: number;
+  chunk_id: string;
+  doc_id: string;
+  doc_title: string | null;
+  page: number | null;
+  section: string | null;
+  snippet: string | null;
+  text: string | null;
+  missing?: boolean;
+};
+
+export type ChatUsage = {
+  prompt_tokens: number;
+  completion_tokens: number;
+  gateway?: Partial<GatewayMeta>;
+  retrieval_ms?: Record<string, number>;
+  sources?: number;
+};
+
+export type Message = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  token_count: number;
+  citations: Citation[];
+  usage: ChatUsage | null;
+  created_at: string;
+};
+
+export type ChatHandlers = {
+  onToken: (text: string) => void;
+  onCitations?: (citations: Citation[], invalid: number[]) => void;
+  onUsage?: (usage: ChatUsage) => void;
+  onError?: (code: string, message: string) => void;
+  signal?: AbortSignal;
+};
+
+/** POST /conversations/{id}/chat: streams token, citations, usage, done events. */
+async function chatInConversation(
+  token: string,
+  conversationId: string,
+  message: string,
+  handlers: ChatHandlers,
+): Promise<{ messageId: string | null }> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_V1}/conversations/${conversationId}/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ message }),
+      signal: handlers.signal,
+    });
+  } catch (err) {
+    if ((err as Error).name === "AbortError") throw err;
+    throw new ApiError(
+      0,
+      "network_error",
+      "Cannot reach the API. Is the backend running?",
+    );
+  }
+  if (!response.ok || !response.body) throw await errorFrom(response);
+
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  let messageId: string | null = null;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value;
+    const blocks = buffer.split("\n\n");
+    buffer = blocks.pop() ?? "";
+    for (const block of blocks) {
+      let event = "message";
+      let data = "";
+      for (const line of block.split("\n")) {
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        else if (line.startsWith("data:")) data += line.slice(5).trim();
+      }
+      if (!data) continue;
+      const payload = JSON.parse(data);
+      if (event === "token") handlers.onToken(payload.text);
+      else if (event === "citations")
+        handlers.onCitations?.(payload.citations, payload.invalid);
+      else if (event === "usage") handlers.onUsage?.(payload);
+      else if (event === "error")
+        handlers.onError?.(payload.code, payload.message);
+      else if (event === "done") messageId = payload.message_id;
+    }
+  }
+  return { messageId };
+}
+
 // ---------- Endpoints ----------
 export const api = {
   login: (email: string, password: string) =>
@@ -485,6 +590,35 @@ export const api = {
         token,
       },
     ),
+
+  listConversations: (token: string) =>
+    request<Conversation[]>(`${API_V1}/conversations`, { token }),
+
+  createConversation: (token: string, docIds: string[] = []) =>
+    request<Conversation>(`${API_V1}/conversations`, {
+      method: "POST",
+      token,
+      json: { doc_ids: docIds },
+    }),
+
+  updateConversation: (
+    token: string,
+    id: string,
+    patch: { title?: string; doc_ids?: string[] },
+  ) =>
+    request<Conversation>(`${API_V1}/conversations/${id}`, {
+      method: "PATCH",
+      token,
+      json: patch,
+    }),
+
+  deleteConversation: (token: string, id: string) =>
+    request<void>(`${API_V1}/conversations/${id}`, { method: "DELETE", token }),
+
+  listMessages: (token: string, id: string) =>
+    request<Message[]>(`${API_V1}/conversations/${id}/messages`, { token }),
+
+  chatInConversation,
 
   // /readyz returns 503 with a body when not ready; surface the body either way.
   readiness: async (): Promise<Readiness> => {

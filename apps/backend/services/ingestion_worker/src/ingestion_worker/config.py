@@ -22,6 +22,15 @@ class WorkerSettings(BaseServiceSettings):
 
     qdrant_url: str = "http://localhost:6333"
 
+    # Knowledge graph. GRAPH_EXTRACTION=false skips the graphing stage entirely.
+    neo4j_uri: str = "bolt://localhost:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: SecretStr = SecretStr("platform-neo4j")
+    graph_extraction: bool = True
+    graph_alias: str = "extract"
+    graph_batch_chars: int = 6000
+    graph_max_chunks: int = 300
+
     s3_endpoint: str = "http://localhost:9000"
     s3_access_key: str = "platform"
     s3_secret_key: SecretStr = SecretStr("platform-minio")

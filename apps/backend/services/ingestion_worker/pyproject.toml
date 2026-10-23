@@ -8,6 +8,7 @@ dependencies = [
     "platform-db",
     "platform-messaging",
     "platform-rag[ingest]",
+    "platform-graph",
     "llm-client",
     "watchfiles>=0.24",
 ]
@@ -24,6 +25,7 @@ platform-core = { workspace = true }
 platform-db = { workspace = true }
 platform-messaging = { workspace = true }
 platform-rag = { workspace = true }
+platform-graph = { workspace = true }
 llm-client = { workspace = true }
 
 [tool.pytest.ini_options]

@@ -23,6 +23,9 @@ def make_settings(**overrides: object) -> Settings:
         "jwt_secret": "test-secret-at-least-32-bytes-long!!",
         "readiness_timeout_seconds": 1.0,
         "seed_admin_password": "admin12345",
+        # Integration tests inject fakes; no model downloads or Neo4j needed.
+        "reranker": "none",
+        "graph_enabled": False,
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)  # type: ignore[arg-type]

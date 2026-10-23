@@ -16,6 +16,9 @@ UNREACHABLE = {
     "gateway_url": "http://127.0.0.1:1",
     "s3_endpoint": "http://127.0.0.1:1",
     "qdrant_url": "http://127.0.0.1:1",
+    "neo4j_uri": "bolt://127.0.0.1:1",
+    "graph_enabled": True,
+    "reranker": "none",
 }
 
 
@@ -53,6 +56,7 @@ async def test_readyz_reports_unavailable_dependencies(client: httpx.AsyncClient
         "gateway": "error",
         "storage": "error",
         "qdrant": "error",
+        "neo4j": "error",
     }
 
 

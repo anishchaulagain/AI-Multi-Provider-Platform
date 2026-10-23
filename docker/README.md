@@ -56,5 +56,7 @@ Leaving out `compose.ports.yml` keeps every service on the internal Docker netwo
 ## Notes
 
 - **MinIO** runs from `pgsty/minio`, a maintained fork of the community edition (upstream stopped publishing free images in 2025). The binary, CLI and env vars are the same, and any S3-compatible store works. The one-shot `minio-init` job creates the `documents` bucket.
+- **Neo4j** schema (constraints, indexes, the `entity_names` full-text index) is applied by the API and worker on startup; `infra/neo4j/init.cypher` is a generated copy. Browse the graph at http://localhost:7474.
+- **Reranker** model downloads on first use into the `model_cache` volume; set `RERANKER=none` to skip it.
 - **Ingestion workers** scale with `INGEST_WORKERS` in `docker/.env`. Each consumes one job at a time (`prefetch=1`).
 - **RabbitMQ topology** (exchanges, quorum work queue, TTL retry queues, DLQ) is declared by the API and worker on startup. `infra/rabbitmq/definitions.json` is a generated copy for reference or `rabbitmqadmin import`; a test keeps the two in sync.

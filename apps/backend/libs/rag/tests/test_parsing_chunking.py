@@ -4,7 +4,7 @@ from conftest import make_docx, make_pdf
 from platform_rag.formats import DocumentParseError, UnsupportedFormatError, detect_format
 from platform_rag.ingest.chunking import chunk_document
 from platform_rag.ingest.parsing import parse
-from platform_rag.ingest.sparse import Bm25Encoder
+from platform_rag.sparse import Bm25Encoder
 
 # ---------- format detection ----------
 

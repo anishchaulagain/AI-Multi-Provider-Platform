@@ -236,7 +236,7 @@ async def reingest(
 
 async def delete(session: AsyncSession, resources: Resources, doc: Document) -> None:
     """Remove the row first (a running job then stops and cleans up after itself),
-    then the stored chunks and the raw file."""
+    then the stored chunks, the raw file and the document's graph."""
     tenant_id, doc_id = doc.tenant_id, doc.id
     await session.delete(doc)
     await session.commit()
@@ -249,6 +249,11 @@ async def delete(session: AsyncSession, resources: Resources, doc: Document) -> 
         await resources.blobs.delete_prefix(f"{tenant_id}/{doc_id}/")
     except Exception as exc:  # noqa: BLE001
         errors.append(f"file: {exc!r}")
+    if resources.graph is not None:
+        try:
+            await resources.graph.delete_document(tenant_id, doc_id)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"graph: {exc!r}")
     if errors:
         logger.error("document_cleanup_incomplete", doc_id=str(doc_id), errors=errors)
     await _publish_status(resources, doc, deleted=True)

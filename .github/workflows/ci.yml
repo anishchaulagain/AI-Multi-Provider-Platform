@@ -44,10 +44,20 @@ jobs:
       qdrant:
         image: qdrant/qdrant:latest
         ports: ["6333:6333"]
+      neo4j:
+        image: neo4j:5-community
+        env:
+          NEO4J_AUTH: neo4j/platform-neo4j
+        ports: ["7687:7687"]
+        options: >-
+          --health-cmd "wget -qO- http://localhost:7474 || exit 1"
+          --health-interval 10s --health-timeout 10s --health-retries 20
     env:
       CI: "true"
       TEST_DATABASE_URL: postgresql+asyncpg://platform:platform@localhost:5432/platform_test
       TEST_REDIS_URL: redis://localhost:6379/15
+      # The API downloads no reranker model in CI.
+      RERANKER: none
     steps:
       - uses: actions/checkout@v4
 
@@ -73,7 +83,7 @@ jobs:
       - name: Mypy
         run: |
           uv run mypy libs/core/src libs/db/src
-          for m in libs/llm_client libs/messaging libs/rag services/gateway services/api services/ingestion_worker; do
+          for m in libs/llm_client libs/messaging libs/graph libs/rag services/gateway services/api services/ingestion_worker; do
             (cd $m && uv run mypy --config-file ../../pyproject.toml src tests)
           done
 
@@ -86,7 +96,7 @@ jobs:
 
       - name: Tests
         run: |
-          for m in libs/llm_client libs/messaging libs/rag services/gateway services/api services/ingestion_worker; do
+          for m in libs/llm_client libs/messaging libs/graph libs/rag services/gateway services/api services/ingestion_worker; do
             echo "== $m"
             (cd $m && uv run pytest -v)
           done

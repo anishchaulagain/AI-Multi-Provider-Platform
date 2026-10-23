@@ -32,6 +32,7 @@ known-first-party = [
     "platform_db",
     "platform_messaging",
     "platform_rag",
+    "platform_graph",
     "llm_client",
     "platform_api",
     "gateway",
@@ -58,6 +59,7 @@ module = [
     "pymupdf.*",
     "docx.*",
     "py_rust_stemmers.*",
+    "fastembed.*",
     "minio.*",
 ]
 ignore_missing_imports = true

@@ -52,6 +52,8 @@ async def test_pdf_upload_reaches_ready_with_chunks_in_qdrant(stack: Stack) -> N
     assert ready["chunk_count"] >= 2
     assert ready["attempts"] == 1
     assert ready["details"]["summary"] == "A test document."
+    graph = ready["details"]["graph"]
+    assert graph["status"] == "ok" and graph["entities"] == 2 and graph["relations"] == 1
     assert ready["ingested_at"] is not None
 
     chunks = (
@@ -184,3 +186,27 @@ async def _dlq_message(doc_id: str) -> aio_pika.abc.AbstractIncomingMessage:
             if json.loads(message.body)["doc_id"] == doc_id:
                 return message
     raise AssertionError("no DLQ message for document")
+
+
+async def test_graph_is_written_and_removed_with_the_document(stack: Stack) -> None:
+    await stack.start_worker()
+    doc_id = (await stack.upload("graph.txt", b"Retrieval uses vectors.")).json()["id"]
+    await stack.wait_for(doc_id, {"ready"})
+
+    entities = (
+        await stack.client.get("/api/v1/graph/entities?q=retrieval", headers=stack.headers)
+    ).json()["items"]
+    assert [e["name"] for e in entities] == ["Retrieval"]
+    hood = (
+        await stack.client.get(
+            f"/api/v1/graph/neighborhood/{entities[0]['id']}", headers=stack.headers
+        )
+    ).json()
+    assert {n["name"] for n in hood["nodes"]} == {"Retrieval", "Vectors"}
+    assert hood["edges"][0]["type"] == "USES"
+
+    await stack.client.delete(f"/api/v1/documents/{doc_id}", headers=stack.headers)
+    after = (
+        await stack.client.get("/api/v1/graph/entities?q=retrieval", headers=stack.headers)
+    ).json()["items"]
+    assert after == []

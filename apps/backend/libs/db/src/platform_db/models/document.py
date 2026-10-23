@@ -15,6 +15,7 @@ class DocumentStatus(enum.StrEnum):
     PARSING = "parsing"
     CHUNKING = "chunking"
     EMBEDDING = "embedding"
+    GRAPHING = "graphing"
     READY = "ready"
     FAILED = "failed"
 
