@@ -14,6 +14,8 @@ UNREACHABLE = {
     "redis_url": "redis://127.0.0.1:1/0",
     "rabbitmq_url": "amqp://x:x@127.0.0.1:1/",
     "gateway_url": "http://127.0.0.1:1",
+    "s3_endpoint": "http://127.0.0.1:1",
+    "qdrant_url": "http://127.0.0.1:1",
 }
 
 
@@ -47,7 +49,10 @@ async def test_readyz_reports_unavailable_dependencies(client: httpx.AsyncClient
         "database": "error",
         "redis": "error",
         "rabbitmq": "error",
-        "gateway": "error",  # optional: reported, but not why we're not ready
+        # optional: reported, but not why we're not ready
+        "gateway": "error",
+        "storage": "error",
+        "qdrant": "error",
     }
 
 

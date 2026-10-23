@@ -1,0 +1,129 @@
+{
+  "exchanges": [
+    {
+      "name": "ingest",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "ingest.retry",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "ingest.dlx",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "ingest.documents",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 5,
+        "x-dead-letter-exchange": "ingest.dlx",
+        "x-dead-letter-routing-key": "ingest.dlq"
+      }
+    },
+    {
+      "name": "ingest.documents.retry.10s",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-message-ttl": 10000,
+        "x-dead-letter-exchange": "ingest",
+        "x-dead-letter-routing-key": "documents.ingest"
+      }
+    },
+    {
+      "name": "ingest.documents.retry.1m",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-message-ttl": 60000,
+        "x-dead-letter-exchange": "ingest",
+        "x-dead-letter-routing-key": "documents.ingest"
+      }
+    },
+    {
+      "name": "ingest.documents.retry.10m",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-message-ttl": 600000,
+        "x-dead-letter-exchange": "ingest",
+        "x-dead-letter-routing-key": "documents.ingest"
+      }
+    },
+    {
+      "name": "ingest.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    }
+  ],
+  "bindings": [
+    {
+      "source": "ingest",
+      "vhost": "/",
+      "destination": "ingest.documents",
+      "destination_type": "queue",
+      "routing_key": "documents.ingest",
+      "arguments": {}
+    },
+    {
+      "source": "ingest.retry",
+      "vhost": "/",
+      "destination": "ingest.documents.retry.10s",
+      "destination_type": "queue",
+      "routing_key": "ingest.documents.retry.10s",
+      "arguments": {}
+    },
+    {
+      "source": "ingest.retry",
+      "vhost": "/",
+      "destination": "ingest.documents.retry.1m",
+      "destination_type": "queue",
+      "routing_key": "ingest.documents.retry.1m",
+      "arguments": {}
+    },
+    {
+      "source": "ingest.retry",
+      "vhost": "/",
+      "destination": "ingest.documents.retry.10m",
+      "destination_type": "queue",
+      "routing_key": "ingest.documents.retry.10m",
+      "arguments": {}
+    },
+    {
+      "source": "ingest.dlx",
+      "vhost": "/",
+      "destination": "ingest.dlq",
+      "destination_type": "queue",
+      "routing_key": "ingest.dlq",
+      "arguments": {}
+    }
+  ]
+}

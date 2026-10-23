@@ -9,6 +9,9 @@ dependencies = [
     "platform-core",
     "platform-db",
     "llm-client",
+    "platform-messaging",
+    "platform-rag",
+    "python-multipart>=0.0.9",
     "pyjwt>=2.15.1",
     "pwdlib[argon2]>=0.3.1",
     "aio-pika>=10.1.0",
@@ -22,6 +25,8 @@ build-backend = "uv_build"
 platform-core = { workspace = true }
 platform-db = { workspace = true }
 llm-client = { workspace = true }
+platform-messaging = { workspace = true }
+platform-rag = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -29,3 +34,4 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 markers = ["integration: requires Postgres and Redis"]
+filterwarnings = ["ignore:Payload indexes have no effect in the local Qdrant:UserWarning"]

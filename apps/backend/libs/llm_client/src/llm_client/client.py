@@ -88,7 +88,7 @@ class Caller:
 
 
 class GatewayStream:
-    """An open streaming response. Iterate parsed chunks or raw SSE bytes."""
+    """An open streaming response. Iterate parsed chunks, or the SSE bytes via aiter_bytes()."""
 
     def __init__(self, response: httpx.Response) -> None:
         self._response = response
@@ -96,8 +96,9 @@ class GatewayStream:
         self.headers = dict(response.headers)
         self.meta = h.GatewayMeta.from_headers(response.headers)
 
-    def aiter_raw(self) -> AsyncIterator[bytes]:
-        return self._response.aiter_raw()
+    def aiter_bytes(self) -> AsyncIterator[bytes]:
+        """Decoded body bytes (any Content-Encoding removed), for relaying as-is."""
+        return self._response.aiter_bytes()
 
     async def __aiter__(self) -> AsyncIterator[ChatCompletionChunk]:
         async for line in self._response.aiter_lines():

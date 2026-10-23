@@ -3,15 +3,15 @@
 
 COMPOSE      := docker compose --env-file docker/.env -f docker/compose.yml -f docker/compose.ports.yml
 COMPOSE_DEV  := $(COMPOSE) -f docker/compose.dev.yml
-INFRA        := postgres redis rabbitmq qdrant neo4j minio litellm
+INFRA        := postgres redis rabbitmq qdrant neo4j minio minio-init litellm
 BACKEND      := cd apps/backend &&
 FRONTEND     := cd apps/frontend &&
 # uv workspace members, each tested/type-checked in its own run.
-PY_MEMBERS   := libs/llm_client services/gateway services/api
+PY_MEMBERS   := libs/llm_client libs/messaging libs/rag services/gateway services/api services/ingestion_worker
 
 .DEFAULT_GOAL := help
 .PHONY: help env install up up-all down down-v logs ps models dev dev-backend dev-gateway \
-        dev-frontend docker-dev migrate migration seed test test-unit lint format typecheck check
+        dev-worker dev-frontend docker-dev migrate migration seed test test-unit lint format typecheck check
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -53,8 +53,8 @@ ps: ## Show container status
 	$(COMPOSE) ps
 
 # ---------- Local dev ----------
-dev: ## Run API, gateway and frontend locally with hot reload
-	@$(MAKE) -j3 dev-backend dev-gateway dev-frontend
+dev: ## Run API, gateway, ingestion worker and frontend locally with hot reload
+	@$(MAKE) -j4 dev-backend dev-gateway dev-worker dev-frontend
 
 dev-backend:
 	$(BACKEND) uv run uvicorn platform_api.main:app --reload --port 8000
@@ -62,6 +62,9 @@ dev-backend:
 # docker/.env supplies the provider API keys (deployments without a key are skipped).
 dev-gateway:
 	$(BACKEND) uv run uvicorn gateway.main:app --reload --port 8100 --env-file ../../docker/.env
+
+dev-worker:
+	$(BACKEND) uv run watchfiles --filter python "python -m ingestion_worker" services libs
 
 dev-frontend:
 	$(FRONTEND) npm run dev
@@ -81,8 +84,8 @@ test: ## Run all tests (API integration tests need `make up`)
 	@for m in $(PY_MEMBERS); do echo "== $$m"; (cd apps/backend/$$m && uv run pytest) || exit 1; done
 	$(FRONTEND) npm run lint
 
-test-unit: ## Run tests that need no services
-	@for m in libs/llm_client services/gateway; do (cd apps/backend/$$m && uv run pytest) || exit 1; done
+test-unit: ## Run tests that need no services (integration tests skip themselves)
+	@for m in libs/llm_client libs/rag services/gateway; do (cd apps/backend/$$m && uv run pytest) || exit 1; done
 	cd apps/backend/services/api && uv run pytest tests/unit
 
 lint: ## Lint backend and frontend

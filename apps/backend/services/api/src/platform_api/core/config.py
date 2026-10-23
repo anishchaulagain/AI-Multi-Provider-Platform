@@ -3,6 +3,7 @@ from functools import lru_cache
 from pydantic import SecretStr, model_validator
 
 from platform_core.config import BaseServiceSettings
+from platform_messaging import WorkQueue, ingest_documents_queue
 
 DEV_JWT_SECRET = "dev-insecure-change-me-0123456789abcdef"
 
@@ -14,6 +15,9 @@ class Settings(BaseServiceSettings):
 
     # Data stores used by later phases
     rabbitmq_url: str = "amqp://platform:platform@localhost:5672/"
+    # Must match between API and worker (they both declare the topology).
+    ingest_exchange: str = "ingest"
+    ingest_retry_delays_ms: tuple[int, ...] = (10_000, 60_000, 600_000)
     qdrant_url: str = "http://localhost:6333"
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
@@ -21,6 +25,12 @@ class Settings(BaseServiceSettings):
     s3_endpoint: str = "http://localhost:9000"
     s3_access_key: str = "platform"
     s3_secret_key: SecretStr = SecretStr("platform-minio")
+    s3_bucket: str = "documents"
+
+    # Documents
+    max_upload_mb: int = 25
+    # Names the Qdrant chunk collection; must match the ingestion worker's.
+    embed_model_name: str = "nomic-embed-text"
 
     # AI Gateway (internal)
     gateway_url: str = "http://localhost:8100"
@@ -53,6 +63,9 @@ class Settings(BaseServiceSettings):
                     "outside local/test environments"
                 )
         return self
+
+    def ingest_queue(self) -> WorkQueue:
+        return ingest_documents_queue(self.ingest_exchange, self.ingest_retry_delays_ms)
 
 
 @lru_cache
