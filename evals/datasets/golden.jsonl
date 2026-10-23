@@ -1,0 +1,9 @@
+{"id": "leave-days", "question": "How many vacation days do full-time employees get?", "expected_doc": "northwind-handbook.md", "expected_terms": ["25"]}
+{"id": "carry-over", "question": "Can unused vacation days be carried over?", "expected_doc": "northwind-handbook.md", "expected_terms": ["5"]}
+{"id": "parental-leave", "question": "How long is parental leave?", "expected_doc": "northwind-handbook.md", "expected_terms": ["20 weeks"]}
+{"id": "remote-days", "question": "How many days per week can employees work remotely?", "expected_doc": "northwind-handbook.md", "expected_terms": ["three"]}
+{"id": "atlas-weight", "question": "What is the maximum weight Atlas can lift?", "expected_doc": "northwind-products.md", "expected_terms": ["15"]}
+{"id": "courier-battery", "question": "How long does the Courier battery last?", "expected_doc": "northwind-products.md", "expected_terms": ["10 hours"]}
+{"id": "helm-language", "question": "Which programming language is Helm written in?", "expected_doc": "northwind-products.md", "expected_terms": ["Rust"]}
+{"id": "atlas-os", "question": "Which operating system does the Atlas robot run, and what language is it written in?", "expected_doc": "northwind-products.md", "expected_terms": ["Helm", "Rust"]}
+{"id": "unknown", "question": "What is Northwind's annual revenue?", "expected_doc": null, "expected_terms": ["don't know"]}

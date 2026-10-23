@@ -175,9 +175,9 @@ The full transcript is always kept in Postgres, so compression never loses data.
 ## Roadmap
 
 - [x] **1. Foundation:** database layer and migrations, JWT and API-key auth, rate limiting, logging, readiness checks, CI, login page
-- [ ] **2. AI Gateway:** LiteLLM aliases, fallbacks, circuit breaker, semantic cache, quotas
-- [ ] **3. Ingestion:** upload, queue with retry and DLQ, LlamaIndex pipeline, vector store, live status
-- [ ] **4. GraphRAG:** Neo4j graph, hybrid and graph retrieval, rerank, cited streaming answers
+- [x] **2. AI Gateway:** LiteLLM aliases, fallbacks, circuit breaker, semantic cache, quotas
+- [x] **3. Ingestion:** upload, queue with retry and DLQ, LlamaIndex pipeline, vector store, live status
+- [x] **4. GraphRAG:** Neo4j graph, hybrid and graph retrieval, rerank, cited streaming answers
 - [ ] **5. History:** context builder, compaction, semantic recall, context capsules
 - [ ] **6. Evaluation:** online judge, offline datasets, CI quality gates, feedback
 - [ ] **7. Frontend:** chat, documents, graph explorer, evals dashboard, admin
@@ -187,7 +187,7 @@ The full transcript is always kept in Postgres, so compression never loses data.
 
 ## Notes on Free Models
 
-Free-tier model IDs and rate limits change often. They are defined only in `infra/litellm/config.yaml`, where environment variables can override them; application code refers only to role names like `chat-fast`. The platform runs with no API keys at all, using local Ollama models only. Each free-tier key you add becomes another fallback route.
+Free-tier model IDs and rate limits change often. Deployments are defined in `infra/litellm/config.yaml` and chained into aliases in `infra/gateway/routes.yaml`; application code refers only to role names like `chat-fast`. The platform runs with no API keys at all, using local Ollama models only. Each free-tier key you add becomes another fallback route.
 
 ## License
 

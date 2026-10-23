@@ -1,7 +1,8 @@
 // Typed client for the Platform API. Mirrors the backend error schema:
 // { "error": { "code", "message", "request_id", "details"? } }
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+export const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const API_V1 = `${API_URL}/api/v1`;
 
 export class ApiError extends Error {
@@ -22,7 +23,10 @@ type RequestOptions = Omit<RequestInit, "body"> & {
   json?: unknown;
 };
 
-async function request<T>(url: string, { token, json, headers, ...init }: RequestOptions = {}) {
+async function request<T>(
+  url: string,
+  { token, json, headers, ...init }: RequestOptions = {},
+) {
   const finalHeaders = new Headers(headers);
   if (json !== undefined) finalHeaders.set("Content-Type", "application/json");
   if (token) finalHeaders.set("Authorization", `Bearer ${token}`);
@@ -35,7 +39,11 @@ async function request<T>(url: string, { token, json, headers, ...init }: Reques
       body: json !== undefined ? JSON.stringify(json) : undefined,
     });
   } catch {
-    throw new ApiError(0, "network_error", "Cannot reach the API. Is the backend running?");
+    throw new ApiError(
+      0,
+      "network_error",
+      "Cannot reach the API. Is the backend running?",
+    );
   }
 
   if (response.status === 204) return undefined as T;
@@ -64,7 +72,11 @@ export type User = {
   created_at: string;
 };
 
-export type TokenResponse = { access_token: string; token_type: "bearer"; expires_in: number };
+export type TokenResponse = {
+  access_token: string;
+  token_type: "bearer";
+  expires_in: number;
+};
 
 export type ApiKey = {
   id: string;
@@ -78,7 +90,10 @@ export type ApiKey = {
 
 export type ApiKeyCreated = ApiKey & { key: string };
 
-export type Readiness = { status: "ready" | "not_ready"; checks: Record<string, string> };
+export type Readiness = {
+  status: "ready" | "not_ready";
+  checks: Record<string, string>;
+};
 
 export type ModelInfo = {
   id: string;
@@ -87,7 +102,10 @@ export type ModelInfo = {
   deployments: string[];
 };
 
-export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+export type ChatMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
 
 export type ChatRequest = {
   model: string;
@@ -96,7 +114,11 @@ export type ChatRequest = {
   max_tokens?: number;
 };
 
-export type Usage = { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+export type Usage = {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+};
 
 export type GatewayMeta = {
   alias: string | null;
@@ -110,7 +132,11 @@ export type GatewayMeta = {
 export type ChatCompletion = {
   id: string;
   model: string;
-  choices: { index: number; message: ChatMessage; finish_reason: string | null }[];
+  choices: {
+    index: number;
+    message: ChatMessage;
+    finish_reason: string | null;
+  }[];
   usage?: Usage;
 };
 
@@ -137,8 +163,17 @@ export type UsageSummary = {
 export type ProviderStatus = {
   provider: string;
   configured: boolean;
-  breaker: { state: "closed" | "open" | "half_open" | "unknown"; recent_failures: number | null; reopens_in_s: number | null };
-  deployments: { name: string; kind: string; configured: boolean; rpm: number | null }[];
+  breaker: {
+    state: "closed" | "open" | "half_open" | "unknown";
+    recent_failures: number | null;
+    reopens_in_s: number | null;
+  };
+  deployments: {
+    name: string;
+    kind: string;
+    configured: boolean;
+    rpm: number | null;
+  }[];
 };
 
 function readMeta(headers: Headers): GatewayMeta {
@@ -165,13 +200,20 @@ async function errorFrom(response: Response): Promise<ApiError> {
 }
 
 function llmHeaders(token: string, noCache: boolean): Headers {
-  const headers = new Headers({ "Content-Type": "application/json", Authorization: `Bearer ${token}` });
+  const headers = new Headers({
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  });
   if (noCache) headers.set("Cache-Control", "no-cache");
   return headers;
 }
 
 /** Non-streaming chat completion, returning the gateway routing metadata too. */
-async function chat(token: string, body: ChatRequest, opts: { noCache?: boolean; signal?: AbortSignal } = {}) {
+async function chat(
+  token: string,
+  body: ChatRequest,
+  opts: { noCache?: boolean; signal?: AbortSignal } = {},
+) {
   let response: Response;
   try {
     response = await fetch(`${API_V1}/llm/chat/completions`, {
@@ -182,17 +224,28 @@ async function chat(token: string, body: ChatRequest, opts: { noCache?: boolean;
     });
   } catch (err) {
     if ((err as Error).name === "AbortError") throw err;
-    throw new ApiError(0, "network_error", "Cannot reach the API. Is the backend running?");
+    throw new ApiError(
+      0,
+      "network_error",
+      "Cannot reach the API. Is the backend running?",
+    );
   }
   if (!response.ok) throw await errorFrom(response);
-  return { completion: (await response.json()) as ChatCompletion, meta: readMeta(response.headers) };
+  return {
+    completion: (await response.json()) as ChatCompletion,
+    meta: readMeta(response.headers),
+  };
 }
 
 /** Streaming chat completion over SSE. Calls onDelta for each text fragment. */
 async function streamChat(
   token: string,
   body: ChatRequest,
-  opts: { onDelta: (text: string) => void; noCache?: boolean; signal?: AbortSignal },
+  opts: {
+    onDelta: (text: string) => void;
+    noCache?: boolean;
+    signal?: AbortSignal;
+  },
 ): Promise<{ meta: GatewayMeta; usage: Usage | null }> {
   let response: Response;
   try {
@@ -204,7 +257,11 @@ async function streamChat(
     });
   } catch (err) {
     if ((err as Error).name === "AbortError") throw err;
-    throw new ApiError(0, "network_error", "Cannot reach the API. Is the backend running?");
+    throw new ApiError(
+      0,
+      "network_error",
+      "Cannot reach the API. Is the backend running?",
+    );
   }
   if (!response.ok || !response.body) throw await errorFrom(response);
 
@@ -224,7 +281,12 @@ async function streamChat(
       const payload = line.slice(5).trim();
       if (payload === "[DONE]") return { meta, usage };
       const data = JSON.parse(payload);
-      if (data.error) throw new ApiError(502, data.error.code ?? "stream_error", data.error.message);
+      if (data.error)
+        throw new ApiError(
+          502,
+          data.error.code ?? "stream_error",
+          data.error.message,
+        );
       for (const choice of data.choices ?? []) {
         if (choice.delta?.content) opts.onDelta(choice.delta.content);
       }
@@ -232,6 +294,234 @@ async function streamChat(
     }
   }
   return { meta, usage };
+}
+
+// ---------- Documents ----------
+export type DocumentStatus =
+  "queued" | "parsing" | "chunking" | "embedding" | "ready" | "failed";
+
+export type DocumentInfo = {
+  id: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  content_hash: string;
+  status: DocumentStatus;
+  error: string | null;
+  attempts: number;
+  title: string | null;
+  page_count: number | null;
+  chunk_count: number;
+  details: { format?: string; summary?: string; keywords?: string[] } & Record<
+    string,
+    unknown
+  >;
+  created_at: string;
+  updated_at: string;
+  ingested_at: string | null;
+};
+
+export type DocumentEvent = {
+  doc_id: string;
+  status: DocumentStatus | "deleted";
+  error: string | null;
+  chunk_count: number | null;
+  attempts: number | null;
+  deleted: boolean;
+};
+
+export type ChunkInfo = {
+  id: string;
+  chunk_index: number;
+  text: string;
+  page: number | null;
+  section: string | null;
+};
+
+export type ChunkPage = {
+  items: ChunkInfo[];
+  offset: number;
+  limit: number;
+  total: number;
+};
+
+export const ACCEPTED_UPLOADS = ".pdf,.docx,.md,.markdown,.html,.htm,.txt";
+
+/** Upload one file. Resolves with the document and whether it already existed. */
+async function uploadDocument(token: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  let response: Response;
+  try {
+    response = await fetch(`${API_V1}/documents`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+  } catch {
+    throw new ApiError(
+      0,
+      "network_error",
+      "Cannot reach the API. Is the backend running?",
+    );
+  }
+  if (!response.ok) throw await errorFrom(response);
+  return {
+    document: (await response.json()) as DocumentInfo,
+    duplicate: response.headers.get("x-duplicate") === "true",
+  };
+}
+
+/**
+ * Follow the tenant-wide document status stream (SSE over fetch, so the auth
+ * header can be sent). Reconnects with backoff until `signal` is aborted.
+ */
+async function watchDocuments(
+  token: string,
+  onEvent: (event: DocumentEvent) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  let delay = 1000;
+  while (!signal.aborted) {
+    try {
+      const response = await fetch(`${API_V1}/documents/events`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal,
+      });
+      if (!response.ok || !response.body) throw await errorFrom(response);
+      delay = 1000;
+      const reader = response.body
+        .pipeThrough(new TextDecoderStream())
+        .getReader();
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += value;
+        const blocks = buffer.split("\n\n");
+        buffer = blocks.pop() ?? "";
+        for (const block of blocks) {
+          const data = block
+            .split("\n")
+            .filter((line) => line.startsWith("data:"))
+            .map((line) => line.slice(5).trim())
+            .join("");
+          if (data) onEvent(JSON.parse(data) as DocumentEvent);
+        }
+      }
+    } catch (err) {
+      if (signal.aborted) return;
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403))
+        return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    delay = Math.min(delay * 2, 15000);
+  }
+}
+
+// ---------- Conversations ----------
+export type Conversation = {
+  id: string;
+  title: string;
+  doc_ids: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type Citation = {
+  n: number;
+  chunk_id: string;
+  doc_id: string;
+  doc_title: string | null;
+  page: number | null;
+  section: string | null;
+  snippet: string | null;
+  text: string | null;
+  missing?: boolean;
+};
+
+export type ChatUsage = {
+  prompt_tokens: number;
+  completion_tokens: number;
+  gateway?: Partial<GatewayMeta>;
+  retrieval_ms?: Record<string, number>;
+  sources?: number;
+};
+
+export type Message = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  token_count: number;
+  citations: Citation[];
+  usage: ChatUsage | null;
+  created_at: string;
+};
+
+export type ChatHandlers = {
+  onToken: (text: string) => void;
+  onCitations?: (citations: Citation[], invalid: number[]) => void;
+  onUsage?: (usage: ChatUsage) => void;
+  onError?: (code: string, message: string) => void;
+  signal?: AbortSignal;
+};
+
+/** POST /conversations/{id}/chat: streams token, citations, usage, done events. */
+async function chatInConversation(
+  token: string,
+  conversationId: string,
+  message: string,
+  handlers: ChatHandlers,
+): Promise<{ messageId: string | null }> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_V1}/conversations/${conversationId}/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ message }),
+      signal: handlers.signal,
+    });
+  } catch (err) {
+    if ((err as Error).name === "AbortError") throw err;
+    throw new ApiError(
+      0,
+      "network_error",
+      "Cannot reach the API. Is the backend running?",
+    );
+  }
+  if (!response.ok || !response.body) throw await errorFrom(response);
+
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  let messageId: string | null = null;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value;
+    const blocks = buffer.split("\n\n");
+    buffer = blocks.pop() ?? "";
+    for (const block of blocks) {
+      let event = "message";
+      let data = "";
+      for (const line of block.split("\n")) {
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        else if (line.startsWith("data:")) data += line.slice(5).trim();
+      }
+      if (!data) continue;
+      const payload = JSON.parse(data);
+      if (event === "token") handlers.onToken(payload.text);
+      else if (event === "citations")
+        handlers.onCitations?.(payload.citations, payload.invalid);
+      else if (event === "usage") handlers.onUsage?.(payload);
+      else if (event === "error")
+        handlers.onError?.(payload.code, payload.message);
+      else if (event === "done") messageId = payload.message_id;
+    }
+  }
+  return { messageId };
 }
 
 // ---------- Endpoints ----------
@@ -244,7 +534,8 @@ export const api = {
 
   me: (token: string) => request<User>(`${API_V1}/auth/me`, { token }),
 
-  listApiKeys: (token: string) => request<ApiKey[]>(`${API_V1}/api-keys`, { token }),
+  listApiKeys: (token: string) =>
+    request<ApiKey[]>(`${API_V1}/api-keys`, { token }),
 
   createApiKey: (token: string, name: string, expiresInDays?: number) =>
     request<ApiKeyCreated>(`${API_V1}/api-keys`, {
@@ -257,7 +548,9 @@ export const api = {
     request<void>(`${API_V1}/api-keys/${id}`, { method: "DELETE", token }),
 
   models: (token: string) =>
-    request<{ data: ModelInfo[] }>(`${API_V1}/llm/models`, { token }).then((r) => r.data),
+    request<{ data: ModelInfo[] }>(`${API_V1}/llm/models`, { token }).then(
+      (r) => r.data,
+    ),
 
   chat,
   streamChat,
@@ -266,9 +559,66 @@ export const api = {
     request<UsageSummary>(`${API_V1}/usage/summary?hours=${hours}`, { token }),
 
   providers: (token: string) =>
-    request<{ providers: ProviderStatus[] }>(`${API_V1}/admin/providers`, { token }).then(
-      (r) => r.providers,
+    request<{ providers: ProviderStatus[] }>(`${API_V1}/admin/providers`, {
+      token,
+    }).then((r) => r.providers),
+
+  listDocuments: (token: string, limit = 100) =>
+    request<{ items: DocumentInfo[]; total: number }>(
+      `${API_V1}/documents?limit=${limit}`,
+      {
+        token,
+      },
     ),
+
+  uploadDocument,
+  watchDocuments,
+
+  deleteDocument: (token: string, id: string) =>
+    request<void>(`${API_V1}/documents/${id}`, { method: "DELETE", token }),
+
+  reingestDocument: (token: string, id: string) =>
+    request<DocumentInfo>(`${API_V1}/documents/${id}/reingest`, {
+      method: "POST",
+      token,
+    }),
+
+  documentChunks: (token: string, id: string, offset = 0, limit = 20) =>
+    request<ChunkPage>(
+      `${API_V1}/documents/${id}/chunks?offset=${offset}&limit=${limit}`,
+      {
+        token,
+      },
+    ),
+
+  listConversations: (token: string) =>
+    request<Conversation[]>(`${API_V1}/conversations`, { token }),
+
+  createConversation: (token: string, docIds: string[] = []) =>
+    request<Conversation>(`${API_V1}/conversations`, {
+      method: "POST",
+      token,
+      json: { doc_ids: docIds },
+    }),
+
+  updateConversation: (
+    token: string,
+    id: string,
+    patch: { title?: string; doc_ids?: string[] },
+  ) =>
+    request<Conversation>(`${API_V1}/conversations/${id}`, {
+      method: "PATCH",
+      token,
+      json: patch,
+    }),
+
+  deleteConversation: (token: string, id: string) =>
+    request<void>(`${API_V1}/conversations/${id}`, { method: "DELETE", token }),
+
+  listMessages: (token: string, id: string) =>
+    request<Message[]>(`${API_V1}/conversations/${id}/messages`, { token }),
+
+  chatInConversation,
 
   // /readyz returns 503 with a body when not ready; surface the body either way.
   readiness: async (): Promise<Readiness> => {

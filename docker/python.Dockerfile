@@ -37,13 +37,16 @@ CMD ["sh", "-c", "exec uvicorn $APP_MODULE --host 0.0.0.0 --port $PORT --reload 
 FROM ${PYTHON_IMAGE} AS runtime
 ARG APP_MODULE
 ARG PORT=8000
-RUN useradd --system --uid 1001 app
+RUN useradd --system --uid 1001 app \
+    && mkdir -p /app/.cache && chown app:app /app/.cache
 WORKDIR /app
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --from=builder --chown=app:app /app/libs/db/alembic /app/migrations/alembic
 COPY --from=builder --chown=app:app /app/libs/db/alembic.ini /app/migrations/alembic.ini
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
+    FASTEMBED_CACHE_PATH=/app/.cache/fastembed \
+    HF_HOME=/app/.cache/huggingface \
     APP_MODULE=${APP_MODULE} \
     PORT=${PORT}
 USER app

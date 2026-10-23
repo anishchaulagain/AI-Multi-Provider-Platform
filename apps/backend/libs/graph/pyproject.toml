@@ -1,0 +1,25 @@
+[project]
+name = "platform-graph"
+version = "0.1.0"
+description = "Neo4j knowledge graph: schema, tenant-scoped queries and LLM entity/relation extraction"
+requires-python = ">=3.12"
+dependencies = [
+    "neo4j>=5.20",
+    "pydantic>=2.8",
+    "structlog>=26.1.0",
+    "llm-client",
+]
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+llm-client = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+markers = ["integration: requires running infrastructure"]

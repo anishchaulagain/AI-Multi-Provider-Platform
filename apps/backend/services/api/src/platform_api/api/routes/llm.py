@@ -74,8 +74,8 @@ async def chat_completions(
 
     async def relay() -> AsyncIterator[bytes]:
         try:
-            async for raw in stream.aiter_raw():
-                yield raw
+            async for data in stream.aiter_bytes():
+                yield data
         finally:
             await stack.aclose()
 

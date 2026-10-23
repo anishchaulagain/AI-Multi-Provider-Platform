@@ -3,6 +3,7 @@ from functools import lru_cache
 from pydantic import SecretStr, model_validator
 
 from platform_core.config import BaseServiceSettings
+from platform_messaging import WorkQueue, ingest_documents_queue
 
 DEV_JWT_SECRET = "dev-insecure-change-me-0123456789abcdef"
 
@@ -14,6 +15,9 @@ class Settings(BaseServiceSettings):
 
     # Data stores used by later phases
     rabbitmq_url: str = "amqp://platform:platform@localhost:5672/"
+    # Must match between API and worker (they both declare the topology).
+    ingest_exchange: str = "ingest"
+    ingest_retry_delays_ms: tuple[int, ...] = (10_000, 60_000, 600_000)
     qdrant_url: str = "http://localhost:6333"
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
@@ -21,6 +25,28 @@ class Settings(BaseServiceSettings):
     s3_endpoint: str = "http://localhost:9000"
     s3_access_key: str = "platform"
     s3_secret_key: SecretStr = SecretStr("platform-minio")
+    s3_bucket: str = "documents"
+
+    # Documents
+    max_upload_mb: int = 25
+    # Names the Qdrant chunk collection; must match the ingestion worker's.
+    embed_model_name: str = "nomic-embed-text"
+
+    # Chat / retrieval
+    answer_alias: str = "chat-smart"
+    rewrite_alias: str = "chat-fast"
+    answer_temperature: float = 0.2
+    answer_max_tokens: int = 800
+    embed_query_prefix: str = "search_query: "
+    retrieval_candidates: int = 30
+    retrieval_final_k: int = 8
+    retrieval_graph_hops: int = 1
+    retrieval_context_tokens: int = 3000
+    # Knowledge-graph expansion at query time (needs Neo4j; skipped when down).
+    graph_enabled: bool = True
+    # Cross-encoder reranking: "fastembed" (downloads the model on first use) or "none".
+    reranker: str = "fastembed"
+    reranker_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
 
     # AI Gateway (internal)
     gateway_url: str = "http://localhost:8100"
@@ -53,6 +79,9 @@ class Settings(BaseServiceSettings):
                     "outside local/test environments"
                 )
         return self
+
+    def ingest_queue(self) -> WorkQueue:
+        return ingest_documents_queue(self.ingest_exchange, self.ingest_retry_delays_ms)
 
 
 @lru_cache

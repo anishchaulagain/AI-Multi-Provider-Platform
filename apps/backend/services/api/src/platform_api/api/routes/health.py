@@ -22,8 +22,9 @@ async def healthz(resources: ResourcesDep) -> HealthResponse:
     responses={503: {"model": ReadinessResponse}},
 )
 async def readyz(resources: ResourcesDep, response: Response) -> ReadinessResponse:
-    """Readiness: hard dependencies are reachable. The gateway is reported but optional,
-    so an LLM outage doesn't take the whole API out of rotation."""
+    """Readiness: hard dependencies are reachable. The gateway, object storage and Qdrant
+    are reported but optional: their outage degrades LLM/document features without
+    taking auth and the rest of the API out of rotation."""
 
     async def database() -> None:
         async with resources.engine.connect() as conn:
@@ -36,13 +37,31 @@ async def readyz(resources: ResourcesDep, response: Response) -> ReadinessRespon
         connection = await aio_pika.connect(resources.settings.rabbitmq_url)
         await connection.close()
 
+    async def storage() -> None:
+        await resources.blobs.ping()
+
+    async def qdrant() -> None:
+        await resources.chunks.ping()
+
+    graph = resources.graph
+
+    async def neo4j() -> None:
+        assert graph is not None
+        await graph.ping()
+
     async def gateway() -> None:
         async with httpx.AsyncClient(timeout=2.0) as client:
             (await client.get(f"{resources.settings.gateway_url}/healthz")).raise_for_status()
 
     result = await run_readiness_checks(
         {"database": database, "redis": redis, "rabbitmq": rabbitmq},
-        optional={"gateway": gateway},
+        optional={
+            "gateway": gateway,
+            "storage": storage,
+            "qdrant": qdrant,
+            # Only reported when the knowledge graph is enabled.
+            **({"neo4j": neo4j} if graph is not None else {}),
+        },
         timeout=resources.settings.readiness_timeout_seconds,
     )
     if result.status != "ready":

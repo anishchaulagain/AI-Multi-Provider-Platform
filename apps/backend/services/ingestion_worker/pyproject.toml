@@ -1,0 +1,37 @@
+[project]
+name = "ingestion-worker"
+version = "0.1.0"
+description = "RabbitMQ consumer: parse, chunk, enrich, embed and store uploaded documents"
+requires-python = ">=3.12"
+dependencies = [
+    "platform-core",
+    "platform-db",
+    "platform-messaging",
+    "platform-rag[ingest]",
+    "platform-graph",
+    "llm-client",
+    "watchfiles>=0.24",
+]
+
+[project.scripts]
+ingestion-worker = "ingestion_worker.main:main"
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+platform-core = { workspace = true }
+platform-db = { workspace = true }
+platform-messaging = { workspace = true }
+platform-rag = { workspace = true }
+platform-graph = { workspace = true }
+llm-client = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+markers = ["integration: requires running infrastructure"]
+filterwarnings = ["ignore:Payload indexes have no effect in the local Qdrant:UserWarning"]

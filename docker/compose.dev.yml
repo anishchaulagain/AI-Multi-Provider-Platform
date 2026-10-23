@@ -25,6 +25,17 @@ services:
       - ../apps/backend/services:/app/services
       - ../apps/backend/libs:/app/libs
 
+  ingestion_worker:
+    build:
+      target: dev
+    image: ai-platform-ingestion-worker-dev
+    # Restart the worker on source changes.
+    command: ["watchfiles", "--filter", "python", "python -m ingestion_worker", "/app/services", "/app/libs"]
+    environment: *python-dev
+    volumes:
+      - ../apps/backend/services:/app/services
+      - ../apps/backend/libs:/app/libs
+
   migrate:
     build:
       target: dev

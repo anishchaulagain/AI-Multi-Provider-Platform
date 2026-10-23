@@ -8,20 +8,24 @@ import asyncio
 import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import Any
 
 import asyncpg
 import httpx
 import pytest
 from alembic import command
 from alembic.config import Config
+from qdrant_client import AsyncQdrantClient
 from redis.asyncio import Redis
 from sqlalchemy.engine import make_url
 
 from platform_api.core.config import Settings
+from platform_api.core.resources import Overrides
 from platform_api.core.security import hash_password
 from platform_api.main import create_app
 from platform_api.repositories import tenants as tenants_repo
 from platform_api.repositories import users as users_repo
+from platform_core.storage import InMemoryBlobStore
 from platform_db.models import UserRole
 from platform_db.session import create_engine, create_sessionmaker
 from tests.conftest import TEST_DATABASE_URL, TEST_REDIS_URL, make_client, make_settings
@@ -91,7 +95,7 @@ async def _clean_state(settings: Settings) -> AsyncGenerator[None]:
     """Reset tables and Redis, then seed an admin and a member in one tenant."""
     conn = await asyncpg.connect(_asyncpg_dsn())
     try:
-        await conn.execute("TRUNCATE llm_usage, api_keys, users, tenants CASCADE")
+        await conn.execute("TRUNCATE documents, llm_usage, api_keys, users, tenants CASCADE")
     finally:
         await conn.close()
 
@@ -130,10 +134,31 @@ def fake_gateway() -> FakeGateway:
 
 
 @pytest.fixture
+async def qdrant() -> AsyncGenerator[AsyncQdrantClient]:
+    client = AsyncQdrantClient(":memory:")
+    yield client
+    await client.close()
+
+
+@pytest.fixture
+def graph() -> Any:
+    """Override with a fake GraphStore in tests that need the knowledge graph."""
+    return None
+
+
+@pytest.fixture
 async def client(
-    settings: Settings, fake_gateway: FakeGateway
+    settings: Settings, fake_gateway: FakeGateway, qdrant: AsyncQdrantClient, graph: Any
 ) -> AsyncGenerator[httpx.AsyncClient]:
-    app = create_app(settings, gateway_transport=httpx.MockTransport(fake_gateway.handler))
+    app = create_app(
+        settings,
+        overrides=Overrides(
+            gateway_transport=httpx.MockTransport(fake_gateway.handler),
+            blobs=InMemoryBlobStore(),
+            qdrant=qdrant,
+            graph=graph,
+        ),
+    )
     async for c in make_client(app):
         yield c
 

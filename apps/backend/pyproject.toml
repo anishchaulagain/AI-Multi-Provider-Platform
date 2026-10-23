@@ -27,7 +27,17 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.ruff.lint.isort]
 # libs/db/alembic would otherwise make `alembic` look first-party.
 known-third-party = ["alembic"]
-known-first-party = ["platform_core", "platform_db", "llm_client", "platform_api", "gateway"]
+known-first-party = [
+    "platform_core",
+    "platform_db",
+    "platform_messaging",
+    "platform_rag",
+    "platform_graph",
+    "llm_client",
+    "platform_api",
+    "gateway",
+    "ingestion_worker",
+]
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header"]
@@ -36,8 +46,20 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header"]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
+# PyMuPDF ships partial annotations; its calls are checked by tests instead.
+untyped_calls_exclude = ["pymupdf"]
 exclude = ["alembic/versions/"]
 
 [[tool.mypy.overrides]]
-module = ["uuid6.*", "asyncpg.*", "fakeredis.*"]
+module = [
+    "uuid6.*",
+    "asyncpg.*",
+    "fakeredis.*",
+    "fitz.*",
+    "pymupdf.*",
+    "docx.*",
+    "py_rust_stemmers.*",
+    "fastembed.*",
+    "minio.*",
+]
 ignore_missing_imports = true
