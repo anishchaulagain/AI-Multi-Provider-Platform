@@ -17,6 +17,7 @@ members = [
     "platform-core",
     "platform-db",
     "platform-graph",
+    "platform-history",
     "platform-messaging",
     "platform-rag",
 ]
@@ -1282,6 +1283,7 @@ dependencies = [
     { name = "platform-core" },
     { name = "platform-db" },
     { name = "platform-graph" },
+    { name = "platform-history" },
     { name = "platform-messaging" },
     { name = "platform-rag", extra = ["ingest"] },
     { name = "watchfiles" },
@@ -1293,6 +1295,7 @@ requires-dist = [
     { name = "platform-core", editable = "libs/core" },
     { name = "platform-db", editable = "libs/db" },
     { name = "platform-graph", editable = "libs/graph" },
+    { name = "platform-history", editable = "libs/history" },
     { name = "platform-messaging", editable = "libs/messaging" },
     { name = "platform-rag", extras = ["ingest"], editable = "libs/rag" },
     { name = "watchfiles", specifier = ">=0.24" },
@@ -2393,6 +2396,7 @@ dependencies = [
     { name = "platform-core" },
     { name = "platform-db" },
     { name = "platform-graph" },
+    { name = "platform-history" },
     { name = "platform-messaging" },
     { name = "platform-rag", extra = ["rerank"] },
     { name = "pwdlib", extra = ["argon2"] },
@@ -2409,6 +2413,7 @@ requires-dist = [
     { name = "platform-core", editable = "libs/core" },
     { name = "platform-db", editable = "libs/db" },
     { name = "platform-graph", editable = "libs/graph" },
+    { name = "platform-history", editable = "libs/history" },
     { name = "platform-messaging", editable = "libs/messaging" },
     { name = "platform-rag", extras = ["rerank"], editable = "libs/rag" },
     { name = "pwdlib", extras = ["argon2"], specifier = ">=0.3.1" },
@@ -2476,6 +2481,31 @@ requires-dist = [
     { name = "neo4j", specifier = ">=5.20" },
     { name = "pydantic", specifier = ">=2.8" },
     { name = "structlog", specifier = ">=26.1.0" },
+]
+
+[[package]]
+name = "platform-history"
+version = "0.1.0"
+source = { editable = "libs/history" }
+dependencies = [
+    { name = "llm-client" },
+    { name = "platform-db" },
+    { name = "pydantic" },
+    { name = "qdrant-client" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "structlog" },
+    { name = "tiktoken" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "llm-client", editable = "libs/llm_client" },
+    { name = "platform-db", editable = "libs/db" },
+    { name = "pydantic", specifier = ">=2.8" },
+    { name = "qdrant-client", specifier = ">=1.12" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
+    { name = "structlog", specifier = ">=26.1.0" },
+    { name = "tiktoken", specifier = ">=0.7" },
 ]
 
 [[package]]

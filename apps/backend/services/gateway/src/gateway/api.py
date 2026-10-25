@@ -135,7 +135,13 @@ async def list_models(service: ServiceDep) -> dict[str, Any]:
     models = [
         ModelInfo(id="auto", kind="chat", description="Picks chat-fast or chat-smart per request")
     ] + [
-        ModelInfo(id=a.name, kind=a.kind, description=a.description, deployments=a.deployments)
+        ModelInfo(
+            id=a.name,
+            kind=a.kind,
+            description=a.description,
+            deployments=a.deployments,
+            context_window=routes.context_window(a.name),
+        )
         for a in routes.aliases.values()
     ]
     return {"object": "list", "data": [m.model_dump() for m in models]}

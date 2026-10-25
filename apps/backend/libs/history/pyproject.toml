@@ -1,0 +1,30 @@
+[project]
+name = "platform-history"
+version = "0.1.0"
+description = "Token-budgeted conversation history: context builder, compaction, recall, capsules"
+requires-python = ">=3.12"
+dependencies = [
+    "tiktoken>=0.7",
+    "pydantic>=2.8",
+    "qdrant-client>=1.12",
+    "sqlalchemy[asyncio]>=2.0",
+    "structlog>=26.1.0",
+    "llm-client",
+    "platform-db",
+]
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+llm-client = { workspace = true }
+platform-db = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+markers = ["integration: requires running infrastructure"]
+filterwarnings = ["ignore:Payload indexes have no effect in the local Qdrant:UserWarning"]

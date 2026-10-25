@@ -26,6 +26,33 @@
       "auto_delete": false,
       "internal": false,
       "arguments": {}
+    },
+    {
+      "name": "history",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "history.retry",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "history.dlx",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
     }
   ],
   "queues": [
@@ -82,6 +109,60 @@
       "arguments": {
         "x-queue-type": "quorum"
       }
+    },
+    {
+      "name": "history.compact",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 5,
+        "x-dead-letter-exchange": "history.dlx",
+        "x-dead-letter-routing-key": "history.dlq"
+      }
+    },
+    {
+      "name": "history.compact.retry.10s",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-message-ttl": 10000,
+        "x-dead-letter-exchange": "history",
+        "x-dead-letter-routing-key": "conversations.compact"
+      }
+    },
+    {
+      "name": "history.compact.retry.1m",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-message-ttl": 60000,
+        "x-dead-letter-exchange": "history",
+        "x-dead-letter-routing-key": "conversations.compact"
+      }
+    },
+    {
+      "name": "history.compact.retry.10m",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-message-ttl": 600000,
+        "x-dead-letter-exchange": "history",
+        "x-dead-letter-routing-key": "conversations.compact"
+      }
+    },
+    {
+      "name": "history.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
     }
   ],
   "bindings": [
@@ -123,6 +204,46 @@
       "destination": "ingest.dlq",
       "destination_type": "queue",
       "routing_key": "ingest.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "history",
+      "vhost": "/",
+      "destination": "history.compact",
+      "destination_type": "queue",
+      "routing_key": "conversations.compact",
+      "arguments": {}
+    },
+    {
+      "source": "history.retry",
+      "vhost": "/",
+      "destination": "history.compact.retry.10s",
+      "destination_type": "queue",
+      "routing_key": "history.compact.retry.10s",
+      "arguments": {}
+    },
+    {
+      "source": "history.retry",
+      "vhost": "/",
+      "destination": "history.compact.retry.1m",
+      "destination_type": "queue",
+      "routing_key": "history.compact.retry.1m",
+      "arguments": {}
+    },
+    {
+      "source": "history.retry",
+      "vhost": "/",
+      "destination": "history.compact.retry.10m",
+      "destination_type": "queue",
+      "routing_key": "history.compact.retry.10m",
+      "arguments": {}
+    },
+    {
+      "source": "history.dlx",
+      "vhost": "/",
+      "destination": "history.dlq",
+      "destination_type": "queue",
+      "routing_key": "history.dlq",
       "arguments": {}
     }
   ]

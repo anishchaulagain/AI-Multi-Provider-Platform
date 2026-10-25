@@ -3,7 +3,7 @@ from functools import lru_cache
 from pydantic import SecretStr
 
 from platform_core.config import BaseServiceSettings
-from platform_messaging import WorkQueue, ingest_documents_queue
+from platform_messaging import WorkQueue, history_compact_queue, ingest_documents_queue
 
 
 class WorkerSettings(BaseServiceSettings):
@@ -47,6 +47,16 @@ class WorkerSettings(BaseServiceSettings):
     extract_metadata: bool = True
     extract_alias: str = "extract"
     max_chunks: int = 5000
+
+    # Conversation compaction (history.compact queue). Must match the API's
+    # HISTORY_EXCHANGE and HISTORY_KEEP_RECENT.
+    history_exchange: str = "history"
+    summary_alias: str = "summarize"
+    summary_max_tokens: int = 300
+    history_keep_recent: int = 6
+
+    def history_queue(self) -> WorkQueue:
+        return history_compact_queue(self.history_exchange, self.ingest_retry_delays_ms)
 
     def ingest_queue(self) -> WorkQueue:
         return ingest_documents_queue(self.ingest_exchange, self.ingest_retry_delays_ms)

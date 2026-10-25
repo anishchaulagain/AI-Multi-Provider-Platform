@@ -108,3 +108,5 @@ class ModelInfo(BaseModel):
     kind: Literal["chat", "embedding"]
     description: str = ""
     deployments: list[str] = []
+    # Smallest context window among the alias's deployments (any may answer).
+    context_window: int | None = None

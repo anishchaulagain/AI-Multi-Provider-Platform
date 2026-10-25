@@ -54,6 +54,12 @@ class RouteTable(BaseModel):
                     )
         return self
 
+    def context_window(self, alias: str) -> int | None:
+        """Smallest window among the alias's usable deployments: a request may be
+        served by any of them after a fallback."""
+        windows = [d.context_window for d in self.chain(alias) if d.context_window and d.configured]
+        return min(windows) if windows else None
+
     def chain(self, alias: str) -> list[Deployment]:
         return [self.deployments[n] for n in self.aliases[alias].deployments]
 

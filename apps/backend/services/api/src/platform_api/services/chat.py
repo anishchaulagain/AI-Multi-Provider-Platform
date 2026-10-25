@@ -1,9 +1,11 @@
-"""Conversations and grounded chat: retrieve -> stream a cited answer -> persist.
+"""Conversations and grounded chat: budgeted history + retrieval -> stream a cited
+answer -> persist -> maybe queue compaction.
 
 SSE events of POST /conversations/{id}/chat, in order:
     token      {"text": "..."}                                (many)
     citations  {"citations": [...], "invalid": [n, ...]}
-    usage      {"prompt_tokens", "completion_tokens", "gateway": {...}, "retrieval_ms": {...}}
+    usage      {"prompt_tokens", "completion_tokens", "gateway", "retrieval_ms",
+                "history": {"raw_history_tokens", "sent_history_tokens", ...}}
     done       {"message_id", "user_message_id"}
 or, if the model stream breaks midway,
     error      {"code", "message"} followed by done (the partial answer is saved).
@@ -25,15 +27,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from llm_client import Caller, ChatCompletionRequest, GatewayError, GatewayStream
 from platform_api.core.resources import Resources
 from platform_api.schemas.conversation import CitationRead, MessageRead
+from platform_api.services import history as history_service
 from platform_core.errors import AppError, NotFoundError
 from platform_db.models import Conversation, Message, MessageRole
-from platform_rag.answer import build_messages, resolve_citations
+from platform_rag.answer import SYSTEM_PROMPT, build_messages, resolve_citations
 from platform_rag.retrieve import RetrievalResult, Turn, estimate_tokens
 
 logger = structlog.get_logger(__name__)
 
 DEFAULT_TITLE = "New conversation"
-_HISTORY_MESSAGES = 4  # last two turns; Phase 5 replaces this with compacted history
 
 
 def _sse(event: str, data: dict[str, Any]) -> bytes:
@@ -55,18 +57,6 @@ async def get_conversation(
     if conversation is None:
         raise NotFoundError("Conversation not found")
     return conversation
-
-
-async def recent_turns(session: AsyncSession, conversation_id: uuid.UUID) -> list[Turn]:
-    rows = (
-        await session.execute(
-            select(Message.role, Message.content)
-            .where(Message.conversation_id == conversation_id)
-            .order_by(Message.created_at.desc(), Message.id.desc())
-            .limit(_HISTORY_MESSAGES)
-        )
-    ).all()
-    return [Turn(role=r.role, content=r.content) for r in reversed(rows)]
 
 
 async def list_messages(
@@ -138,6 +128,7 @@ class PreparedChat:
     retrieval: RetrievalResult
     stream: GatewayStream
     stack: AsyncExitStack
+    history: dict[str, Any] = field(default_factory=dict)
 
 
 async def prepare_chat(
@@ -148,15 +139,46 @@ async def prepare_chat(
     user_id: uuid.UUID,
     question: str,
     request_id: str | None,
+    context_capsule_id: uuid.UUID | None = None,
 ) -> PreparedChat:
     settings = resources.settings
     caller = Caller(tenant_id=conversation.tenant_id, user_id=user_id, request_id=request_id)
-    history = await recent_turns(session, conversation.id)
     doc_ids = [uuid.UUID(d) for d in conversation.doc_ids] or None
+
+    # A capsule this conversation was forked from, or one attached to this request.
+    capsule_text: str | None = None
+    capsule_ids = [c for c in (conversation.capsule_id, context_capsule_id) if c]
+    texts = []
+    for capsule_id in dict.fromkeys(capsule_ids):
+        capsule = await history_service.capsule_for_tenant(
+            session, capsule_id, conversation.tenant_id
+        )
+        texts.append(history_service.capsule_text(capsule))
+    capsule_text = "\n\n".join(texts) or None
+
+    state = await history_service.load_history(
+        session, resources, conversation, capsule_text=capsule_text
+    )
+    alias = conversation.alias or settings.answer_alias
+    window = await resources.windows.window(alias, cap=settings.history_max_context_tokens)
+    built = await resources.history.build(
+        state,
+        question,
+        window=window,
+        system_tokens=resources.counter.count(SYSTEM_PROMPT),
+        recall=history_service.recall_fn(resources, conversation, caller),
+    )
+    # The query rewrite only needs the latest exchange.
+    last_turns = [Turn(role=t.role, content=t.content) for t in state.turns[-2:]]  # type: ignore[arg-type]
 
     try:
         retrieval = await resources.retriever.retrieve(
-            conversation.tenant_id, question, caller=caller, history=history, doc_ids=doc_ids
+            conversation.tenant_id,
+            question,
+            caller=caller,
+            history=last_turns,
+            doc_ids=doc_ids,
+            context_token_budget=built.rag_tokens,
         )
     except GatewayError as exc:
         raise _app_error(exc) from exc
@@ -166,10 +188,10 @@ async def prepare_chat(
         stream = await stack.enter_async_context(
             resources.gateway.stream(
                 ChatCompletionRequest(
-                    model=settings.answer_alias,
-                    messages=build_messages(question, retrieval, history),
+                    model=alias,
+                    messages=build_messages(question, retrieval, built.messages),
                     temperature=settings.answer_temperature,
-                    max_tokens=settings.answer_max_tokens,
+                    max_tokens=min(settings.answer_max_tokens, built.answer_tokens),
                 ),
                 caller=caller,
             )
@@ -183,7 +205,7 @@ async def prepare_chat(
         conversation_id=conversation.id,
         role=MessageRole.USER,
         content=question,
-        token_count=estimate_tokens(question),
+        token_count=resources.counter.count(question),
         citations=[],
     )
     session.add(user_message)
@@ -198,6 +220,7 @@ async def prepare_chat(
         retrieval=retrieval,
         stream=stream,
         stack=stack,
+        history=built.stats,
     )
 
 
@@ -233,6 +256,12 @@ async def stream_answer(resources: Resources, prepared: PreparedChat) -> AsyncIt
                 resources, prepared, answer, [c.stored() for c in citations], invalid, usage
             )
         )
+        # Off the answer path: fold old turns into the summary when history grows.
+        await asyncio.shield(
+            history_service.schedule_compaction(
+                resources, prepared.conversation_id, prepared.tenant_id
+            )
+        )
         yield _sse(
             "done",
             {"message_id": str(message_id), "user_message_id": str(prepared.user_message_id)},
@@ -263,6 +292,7 @@ def _usage(prepared: PreparedChat, answer: _Answer) -> dict[str, Any]:
         "gateway": meta.model_dump(exclude_none=True),
         "retrieval_ms": prepared.retrieval.timings_ms,
         "sources": len(prepared.retrieval.chunks),
+        "history": prepared.history,
         **({"error": answer.error} if answer.error else {}),
     }
 
@@ -283,7 +313,7 @@ async def _save_answer(
             conversation_id=prepared.conversation_id,
             role=MessageRole.ASSISTANT,
             content=answer.text,
-            token_count=usage["completion_tokens"],
+            token_count=resources.counter.count(answer.text),
             citations=citations,
             retrieval=trace,
             usage=usage,

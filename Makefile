@@ -7,11 +7,11 @@ INFRA        := postgres redis rabbitmq qdrant neo4j minio minio-init litellm
 BACKEND      := cd apps/backend &&
 FRONTEND     := cd apps/frontend &&
 # uv workspace members, each tested/type-checked in its own run.
-PY_MEMBERS   := libs/llm_client libs/messaging libs/graph libs/rag services/gateway services/api services/ingestion_worker
+PY_MEMBERS   := libs/llm_client libs/messaging libs/graph libs/history libs/rag services/gateway services/api services/ingestion_worker
 
 .DEFAULT_GOAL := help
 .PHONY: help env install up up-all down down-v logs ps models dev dev-backend dev-gateway \
-        dev-worker dev-frontend docker-dev migrate migration seed golden test test-unit lint format typecheck check
+        dev-worker dev-frontend docker-dev migrate migration seed golden history-check test test-unit lint format typecheck check
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -85,7 +85,7 @@ test: ## Run all tests (API integration tests need `make up`)
 	$(FRONTEND) npm run lint
 
 test-unit: ## Run tests that need no services (integration tests skip themselves)
-	@for m in libs/llm_client libs/graph libs/rag services/gateway; do (cd apps/backend/$$m && uv run pytest) || exit 1; done
+	@for m in libs/llm_client libs/graph libs/history libs/rag services/gateway; do (cd apps/backend/$$m && uv run pytest) || exit 1; done
 	cd apps/backend/services/api && uv run pytest tests/unit
 
 lint: ## Lint backend and frontend
@@ -102,5 +102,8 @@ typecheck: ## Type-check backend and frontend
 
 golden: ## Ask the golden questions against the running stack (needs an LLM route)
 	$(BACKEND) uv run python ../../scripts/golden_smoke.py
+
+history-check: ## 40-turn history test against the running stack (needs an LLM route)
+	$(BACKEND) uv run python ../../scripts/history_smoke.py
 
 check: lint typecheck test ## Everything CI runs

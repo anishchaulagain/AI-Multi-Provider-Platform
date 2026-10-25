@@ -3,7 +3,7 @@ from functools import lru_cache
 from pydantic import SecretStr, model_validator
 
 from platform_core.config import BaseServiceSettings
-from platform_messaging import WorkQueue, ingest_documents_queue
+from platform_messaging import WorkQueue, history_compact_queue, ingest_documents_queue
 
 DEV_JWT_SECRET = "dev-insecure-change-me-0123456789abcdef"
 
@@ -40,6 +40,7 @@ class Settings(BaseServiceSettings):
     answer_temperature: float = 0.2
     answer_max_tokens: int = 800
     embed_query_prefix: str = "search_query: "
+    embed_document_prefix: str = "search_document: "
     retrieval_candidates: int = 30
     retrieval_final_k: int = 8
     retrieval_graph_hops: int = 1
@@ -49,6 +50,24 @@ class Settings(BaseServiceSettings):
     # Cross-encoder reranking: "fastembed" (downloads the model on first use) or "none".
     reranker: str = "fastembed"
     reranker_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
+
+    # Conversation history (token-budgeted context, compaction, capsules)
+    # Prompts are budgeted against min(alias context window, this cap): a smaller
+    # window means fewer tokens per request.
+    history_max_context_tokens: int = 8000
+    # Unsummarized history above this many tokens queues a compaction job.
+    history_compact_threshold: int = 1500
+    # The recent window replays at most this many newest messages verbatim...
+    history_max_recent_messages: int = 10
+    # ...and compaction (queued once that many are unsummarized, or past the token
+    # threshold) summarizes all but the newest `keep_recent`.
+    history_keep_recent: int = 6
+    summary_alias: str = "summarize"
+    summary_max_tokens: int = 300
+    history_recall_k: int = 3
+    history_cache_ttl_seconds: int = 600
+    history_exchange: str = "history"
+    capsule_default_ttl_days: int | None = None
 
     # AI Gateway (internal)
     gateway_url: str = "http://localhost:8100"
@@ -81,6 +100,9 @@ class Settings(BaseServiceSettings):
                     "outside local/test environments"
                 )
         return self
+
+    def history_queue(self) -> WorkQueue:
+        return history_compact_queue(self.history_exchange, self.ingest_retry_delays_ms)
 
     def ingest_queue(self) -> WorkQueue:
         return ingest_documents_queue(self.ingest_exchange, self.ingest_retry_delays_ms)

@@ -12,10 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from llm_client import GatewayClient
 from platform_api.core.config import Settings
+from platform_api.core.windows import ModelWindows
 from platform_core.rate_limit import RateLimiter
 from platform_core.storage import BlobStore, MinioBlobStore
 from platform_db.session import create_engine, create_sessionmaker
 from platform_graph import GraphStore
+from platform_history import ContextBuilder, TokenCounter, TurnStore
 from platform_messaging import Publisher
 from platform_rag.rerank import Reranker, build_reranker
 from platform_rag.retrieve import RetrievalConfig, Retriever
@@ -48,6 +50,10 @@ class Resources:
     blobs: BlobStore
     publisher: Publisher
     chunks: ChunkStore
+    turns: TurnStore
+    counter: TokenCounter
+    history: ContextBuilder
+    windows: ModelWindows
     graph: GraphStore | None
     retriever: Retriever
 
@@ -74,7 +80,10 @@ async def lifespan_resources(
         settings.s3_bucket,
     )
     qdrant = overrides.qdrant or AsyncQdrantClient(url=settings.qdrant_url, timeout=10)
-    publisher = Publisher(settings.rabbitmq_url, (settings.ingest_queue(),))
+    publisher = Publisher(
+        settings.rabbitmq_url, (settings.ingest_queue(), settings.history_queue())
+    )
+    counter = TokenCounter()
     chunks = ChunkStore(qdrant, settings.embed_model_name)
 
     graph = overrides.graph
@@ -124,6 +133,14 @@ async def lifespan_resources(
             chunks=chunks,
             graph=graph,
             retriever=retriever,
+            turns=TurnStore(qdrant, settings.embed_model_name),
+            counter=counter,
+            history=ContextBuilder(
+                counter,
+                recall_k=settings.history_recall_k,
+                max_recent_messages=settings.history_max_recent_messages,
+            ),
+            windows=ModelWindows(gateway),
         )
     finally:
         if warm_task is not None:

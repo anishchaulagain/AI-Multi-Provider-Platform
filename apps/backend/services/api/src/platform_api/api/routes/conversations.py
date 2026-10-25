@@ -20,6 +20,15 @@ from platform_db.models import Conversation, Document
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 
+async def _check_alias(resources: ResourcesDep, alias: str | None) -> str | None:
+    if alias is None:
+        return None
+    aliases = await resources.windows.chat_aliases()
+    if aliases and alias not in aliases:
+        raise InvalidRequestError(f"Unknown chat alias '{alias}'", details={"aliases": aliases})
+    return alias
+
+
 async def _check_documents(
     session: DbSession, tenant_id: uuid.UUID, doc_ids: list[uuid.UUID]
 ) -> list[str]:
@@ -40,13 +49,17 @@ async def _check_documents(
 
 @router.post("", response_model=ConversationRead, status_code=status.HTTP_201_CREATED)
 async def create_conversation(
-    body: ConversationCreate, principal: CurrentPrincipal, session: DbSession
+    body: ConversationCreate,
+    principal: CurrentPrincipal,
+    session: DbSession,
+    resources: ResourcesDep,
 ) -> ConversationRead:
     conversation = Conversation(
         tenant_id=principal.tenant_id,
         user_id=principal.user_id,
         title=body.title or chat_service.DEFAULT_TITLE,
         doc_ids=await _check_documents(session, principal.tenant_id, body.doc_ids),
+        alias=await _check_alias(resources, body.alias),
     )
     session.add(conversation)
     await session.commit()
@@ -94,6 +107,7 @@ async def update_conversation(
     body: ConversationUpdate,
     principal: CurrentPrincipal,
     session: DbSession,
+    resources: ResourcesDep,
 ) -> ConversationRead:
     conversation = await chat_service.get_conversation(
         session,
@@ -103,6 +117,9 @@ async def update_conversation(
     )
     if body.title is not None:
         conversation.title = body.title
+    if body.alias is not None:
+        # An empty string clears the override.
+        conversation.alias = await _check_alias(resources, body.alias) if body.alias else None
     if body.doc_ids is not None:
         conversation.doc_ids = await _check_documents(session, principal.tenant_id, body.doc_ids)
     await session.commit()
@@ -112,7 +129,10 @@ async def update_conversation(
 
 @router.delete("/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_conversation(
-    conversation_id: uuid.UUID, principal: CurrentPrincipal, session: DbSession
+    conversation_id: uuid.UUID,
+    principal: CurrentPrincipal,
+    session: DbSession,
+    resources: ResourcesDep,
 ) -> None:
     conversation = await chat_service.get_conversation(
         session,
@@ -122,6 +142,8 @@ async def delete_conversation(
     )
     await session.delete(conversation)
     await session.commit()
+    # Its recall vectors go too (summaries and memory cascade in Postgres).
+    await resources.turns.delete_conversation(principal.tenant_id, conversation_id)
 
 
 @router.get("/{conversation_id}/messages", response_model=list[MessageRead])
@@ -165,6 +187,7 @@ async def chat(
         user_id=principal.user_id,
         question=body.message.strip(),
         request_id=getattr(request.state, "request_id", None),
+        context_capsule_id=body.context_capsule_id,
     )
     return StreamingResponse(
         chat_service.stream_answer(resources, prepared),
