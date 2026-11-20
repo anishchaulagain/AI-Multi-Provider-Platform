@@ -29,6 +29,7 @@ class Compactor:
         keep_recent: int,
         embed_alias: str,
         embed_prefix: str,
+        embed_input_type: str | None = None,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._redis = redis
@@ -40,6 +41,7 @@ class Compactor:
         self._keep_recent = keep_recent
         self._embed_alias = embed_alias
         self._embed_prefix = embed_prefix
+        self._embed_input_type = embed_input_type
 
     async def handle(self, job: CompactConversationJob, delivery: Delivery) -> None:
         try:
@@ -54,6 +56,7 @@ class Compactor:
                 alias=self._summary_alias,
                 embed_alias=self._embed_alias,
                 embed_prefix=self._embed_prefix,
+                embed_input_type=self._embed_input_type,
                 summary_max_tokens=self._summary_max_tokens,
                 keep_recent=self._keep_recent,
             )

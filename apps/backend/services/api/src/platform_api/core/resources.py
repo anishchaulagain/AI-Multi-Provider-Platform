@@ -14,7 +14,7 @@ from llm_client import GatewayClient
 from platform_api.core.config import Settings
 from platform_api.core.windows import ModelWindows
 from platform_core.rate_limit import RateLimiter
-from platform_core.storage import BlobStore, MinioBlobStore
+from platform_core.storage import BlobStore, build_blob_store
 from platform_db.session import create_engine, create_sessionmaker
 from platform_graph import GraphStore
 from platform_history import ContextBuilder, TokenCounter, TurnStore
@@ -73,11 +73,14 @@ async def lifespan_resources(
         timeout=settings.gateway_timeout_seconds,
         transport=overrides.gateway_transport,
     )
-    blobs = overrides.blobs or MinioBlobStore(
-        settings.s3_endpoint,
-        settings.s3_access_key,
-        settings.s3_secret_key.get_secret_value(),
-        settings.s3_bucket,
+    blobs = overrides.blobs or build_blob_store(
+        settings.blob_store,
+        redis_url=settings.redis_url,
+        retention_hours=settings.upload_retention_hours,
+        s3_endpoint=settings.s3_endpoint,
+        s3_access_key=settings.s3_access_key,
+        s3_secret_key=settings.s3_secret_key.get_secret_value(),
+        s3_bucket=settings.s3_bucket,
     )
     qdrant = overrides.qdrant or AsyncQdrantClient(url=settings.qdrant_url, timeout=10)
     publisher = Publisher(
@@ -105,6 +108,7 @@ async def lifespan_resources(
         config=RetrievalConfig(
             embed_alias=settings.embed_alias,
             query_prefix=settings.embed_query_prefix,
+            query_input_type=settings.embed_query_input_type,
             rewrite_alias=settings.rewrite_alias,
             candidates=settings.retrieval_candidates,
             final_k=settings.retrieval_final_k,

@@ -43,6 +43,8 @@ class GraphExpander(Protocol):
 class RetrievalConfig:
     embed_alias: str = "embed"
     query_prefix: str = "search_query: "
+    # For asymmetric embedding models (e.g. NVIDIA Nemotron): "query".
+    query_input_type: str | None = None
     rewrite_alias: str = "chat-fast"
     candidates: int = 30  # per list (vector, graph)
     rerank_candidates: int = 20
@@ -254,7 +256,10 @@ class Retriever:
     ) -> list[StoredChunk]:
         cfg = self.config
         embedded = await self._gateway.embed(
-            f"{cfg.query_prefix}{query}", caller=caller, model=cfg.embed_alias
+            f"{cfg.query_prefix}{query}",
+            caller=caller,
+            model=cfg.embed_alias,
+            input_type=cfg.query_input_type,
         )
         if not embedded.data.data:
             return []

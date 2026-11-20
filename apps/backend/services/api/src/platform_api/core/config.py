@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import SecretStr, model_validator
 
@@ -26,6 +27,11 @@ class Settings(BaseServiceSettings):
     s3_access_key: str = "platform"
     s3_secret_key: SecretStr = SecretStr("platform-minio")
     s3_bucket: str = "documents"
+    # Where uploads wait until they are processed. "redis" (default) keeps the
+    # original only until chunking + embedding finish, then deletes it; "minio"
+    # keeps it in S3-compatible storage.
+    blob_store: Literal["redis", "minio"] = "redis"
+    upload_retention_hours: int = 24
 
     # Documents
     max_upload_mb: int = 25
@@ -41,6 +47,9 @@ class Settings(BaseServiceSettings):
     answer_max_tokens: int = 800
     embed_query_prefix: str = "search_query: "
     embed_document_prefix: str = "search_document: "
+    # Asymmetric embedding models (NVIDIA Nemotron) need these: query / passage.
+    embed_query_input_type: str | None = None
+    embed_document_input_type: str | None = None
     retrieval_candidates: int = 30
     retrieval_final_k: int = 8
     retrieval_graph_hops: int = 1

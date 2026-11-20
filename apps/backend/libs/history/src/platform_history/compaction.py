@@ -138,6 +138,7 @@ async def compact_conversation(
     alias: str = "summarize",
     embed_alias: str = "embed",
     embed_prefix: str = "",
+    embed_input_type: str | None = None,
     summary_max_tokens: int = 300,
     keep_recent: int = 6,
 ) -> CompactionResult | None:
@@ -175,7 +176,10 @@ async def compact_conversation(
     pairs = pair_turns(conversation_id, new, start)
     if pairs:
         vectors = await gateway.embed(
-            [f"{embed_prefix}{p.text}" for p in pairs], caller=caller, model=embed_alias
+            [f"{embed_prefix}{p.text}" for p in pairs],
+            caller=caller,
+            model=embed_alias,
+            input_type=embed_input_type,
         )
         data = sorted(vectors.data.data, key=lambda d: d.index)
         await turns.add(tenant_id, pairs, [d.embedding for d in data])

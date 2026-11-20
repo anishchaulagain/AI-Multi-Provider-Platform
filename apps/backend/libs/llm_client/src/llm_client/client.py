@@ -242,13 +242,24 @@ class GatewayClient:
 
     # ---------- embeddings ----------
     async def embed(
-        self, inputs: str | list[str], *, caller: Caller, model: str = "embed"
+        self,
+        inputs: str | list[str],
+        *,
+        caller: Caller,
+        model: str = "embed",
+        input_type: str | None = None,
     ) -> GatewayResult[EmbeddingResponse]:
+        """`input_type` ("query" / "passage") is required by asymmetric embedding
+        models such as NVIDIA Nemotron; others ignore it."""
+        request = EmbeddingRequest(model=model, input=inputs)
+        body = request.model_dump()
+        if input_type:
+            body["input_type"] = input_type
         response = await self._request(
             "POST",
             "/v1/embeddings",
             caller=caller,
-            json_body=EmbeddingRequest(model=model, input=inputs).model_dump(),
+            json_body=body,
         )
         return GatewayResult(
             EmbeddingResponse.model_validate(response.json()),

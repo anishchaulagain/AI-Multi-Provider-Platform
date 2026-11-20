@@ -48,6 +48,8 @@ class PipelineConfig:
     embed_batch_size: int = 32
     # nomic-embed-text expects task prefixes; queries use "search_query: ".
     embed_document_prefix: str = "search_document: "
+    # For asymmetric embedding models (e.g. NVIDIA Nemotron): "passage".
+    embed_input_type: str | None = None
     extract_metadata: bool = True
     extract_alias: str = "extract"
     max_chunks: int = 5000
@@ -211,7 +213,9 @@ class IngestionPipeline:
         vectors: list[list[float]] = []
         for start in range(0, len(texts), cfg.embed_batch_size):
             batch = texts[start : start + cfg.embed_batch_size]
-            result = await self._gateway.embed(batch, caller=caller, model=cfg.embed_alias)
+            result = await self._gateway.embed(
+                batch, caller=caller, model=cfg.embed_alias, input_type=cfg.embed_input_type
+            )
             data = sorted(result.data.data, key=lambda d: d.index)
             if len(data) != len(batch):
                 raise EmbeddingMismatchError(f"Expected {len(batch)} embeddings, got {len(data)}")

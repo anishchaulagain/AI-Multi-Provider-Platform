@@ -100,6 +100,7 @@ def recall_fn(resources: Resources, conversation: Conversation, caller: Caller) 
                 f"{settings.embed_query_prefix}{question}",
                 caller=caller,
                 model=settings.embed_alias,
+                input_type=settings.embed_query_input_type,
             )
         except GatewayError as exc:
             logger.warning("recall_embedding_failed", error=exc.code)
@@ -226,6 +227,7 @@ async def create_capsule(
             alias=settings.summary_alias,
             embed_alias=settings.embed_alias,
             embed_prefix=settings.embed_document_prefix,
+            embed_input_type=settings.embed_document_input_type,
             summary_max_tokens=settings.summary_max_tokens,
             keep_recent=settings.history_keep_recent,
         )

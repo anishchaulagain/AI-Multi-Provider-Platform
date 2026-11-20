@@ -3,7 +3,7 @@
 
 COMPOSE      := docker compose --env-file docker/.env -f docker/compose.yml -f docker/compose.ports.yml
 COMPOSE_DEV  := $(COMPOSE) -f docker/compose.dev.yml
-INFRA        := postgres redis rabbitmq qdrant neo4j minio minio-init litellm
+INFRA        := postgres redis rabbitmq qdrant neo4j litellm
 BACKEND      := cd apps/backend &&
 FRONTEND     := cd apps/frontend &&
 # uv workspace members, each tested/type-checked in its own run.

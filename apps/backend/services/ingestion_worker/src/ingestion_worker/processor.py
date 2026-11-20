@@ -39,6 +39,7 @@ class DocumentProcessor:
         blobs: BlobStore,
         store: ChunkStore,
         graph: GraphStore | None = None,
+        embed_model: str = "",
         pipeline: IngestionPipeline,
     ) -> None:
         self._sessionmaker = sessionmaker
@@ -46,6 +47,7 @@ class DocumentProcessor:
         self._blobs = blobs
         self._store = store
         self._graph = graph
+        self._embed_model = embed_model
         self._pipeline = pipeline
 
     # ---------- status ----------
@@ -135,14 +137,24 @@ class DocumentProcessor:
             title=result.title[:500],
             page_count=result.page_count,
             chunk_count=result.chunk_count,
-            details=result.details,
+            # The model that embedded it: a re-upload re-ingests when this changes.
+            details={**result.details, "embed_model": self._embed_model},
             ingested_at=datetime.now(UTC),
         )
         if not finished:  # deleted between the last stage and now
             await self._cleanup(job)
+        # The original file is only kept until it has been chunked and embedded.
+        await self._discard_upload(job)
+
+    async def _discard_upload(self, job: IngestDocumentJob) -> None:
+        try:
+            await self._blobs.delete_prefix(f"{job.tenant_id}/{job.doc_id}/")
+        except Exception as exc:  # noqa: BLE001 - it also expires on its own
+            logger.warning("upload_discard_failed", doc_id=str(job.doc_id), error=repr(exc))
 
     async def _cleanup(self, job: IngestDocumentJob) -> None:
         """The document was deleted while we worked on it: remove what we wrote."""
+        await self._discard_upload(job)
         await self._store.delete_document(job.tenant_id, job.doc_id)
         if self._graph is not None:
             await self._graph.delete_document(job.tenant_id, job.doc_id)
@@ -157,6 +169,8 @@ class DocumentProcessor:
         message = str(exc) or type(exc).__name__
         if retry_in_s is None:
             await self._update(job, status=DocumentStatus.FAILED.value, error=message[:2000])
+            # Retries are exhausted or the file is unusable: don't keep it.
+            await self._discard_upload(job)
         else:
             await self._update(
                 job,

@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import SecretStr
 
@@ -35,6 +36,8 @@ class WorkerSettings(BaseServiceSettings):
     s3_access_key: str = "platform"
     s3_secret_key: SecretStr = SecretStr("platform-minio")
     s3_bucket: str = "documents"
+    blob_store: Literal["redis", "minio"] = "redis"
+    upload_retention_hours: int = 24
 
     # Pipeline. EMBED_MODEL_NAME names the Qdrant collection and must match the API's;
     # change it (and re-ingest) when switching the embed alias to another model.
@@ -42,6 +45,8 @@ class WorkerSettings(BaseServiceSettings):
     embed_alias: str = "embed"
     embed_batch_size: int = 32
     embed_document_prefix: str = "search_document: "
+    # Asymmetric embedding models (NVIDIA Nemotron) need "passage" here.
+    embed_document_input_type: str | None = None
     chunk_size: int = 512
     chunk_overlap: int = 64
     extract_metadata: bool = True

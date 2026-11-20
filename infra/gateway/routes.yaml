@@ -52,6 +52,28 @@ deployments:
     context_window: 131072
     requires_env: OPENROUTER_API_KEY
 
+  # ---- NVIDIA (build.nvidia.com free tier, ~40 rpm per key) ----
+  nvidia-nemotron-bolt:
+    provider: nvidia
+    rpm: 40
+    context_window: 131072
+    requires_env: NVIDIA_API_KEY
+  nvidia-nemotron-lightning:
+    provider: nvidia
+    rpm: 40
+    context_window: 131072
+    requires_env: NVIDIA_API_KEY
+  nvidia-mistral-large:
+    provider: nvidia
+    rpm: 40
+    context_window: 131072
+    requires_env: NVIDIA_API_KEY
+  nvidia-nemotron-embed:
+    provider: nvidia
+    kind: embedding
+    rpm: 40
+    requires_env: NVIDIA_API_KEY
+
   # ---- Ollama (local, no key, no rate limit) ----
   ollama-qwen2.5-7b:
     provider: ollama
@@ -73,20 +95,20 @@ deployments:
 aliases:
   chat-fast:
     description: Low-latency general chat
-    deployments: [groq-gpt-oss-20b, gemini-flash-lite, openrouter-gemma-4-26b, ollama-qwen2.5-7b]
+    deployments: [groq-gpt-oss-20b, nvidia-nemotron-bolt, gemini-flash-lite, openrouter-gemma-4-26b, ollama-qwen2.5-7b]
   chat-smart:
     description: Harder questions, longer context
-    deployments: [gemini-flash, groq-gpt-oss-120b, groq-qwen3-27b, openrouter-gemma-4-31b, ollama-qwen2.5-7b]
+    deployments: [gemini-flash, groq-gpt-oss-120b, nvidia-nemotron-lightning, groq-qwen3-27b, openrouter-gemma-4-31b, nvidia-mistral-large, ollama-qwen2.5-7b]
   extract:
     description: Metadata / entity extraction (JSON)
-    deployments: [ollama-qwen2.5-7b, gemini-flash-lite, groq-gpt-oss-20b]
+    deployments: [ollama-qwen2.5-7b, nvidia-nemotron-bolt, gemini-flash-lite, groq-gpt-oss-20b, nvidia-nemotron-lightning]
   summarize:
     description: History compression
-    deployments: [ollama-qwen2.5-7b, groq-gpt-oss-20b, gemini-flash-lite]
+    deployments: [ollama-qwen2.5-7b, nvidia-nemotron-bolt, groq-gpt-oss-20b, gemini-flash-lite]
   judge:
     # Different model families from the chat answerers where possible, to reduce self-bias.
     description: LLM-as-judge for evaluations
-    deployments: [groq-qwen3-27b, openrouter-gemma-4-31b, ollama-mistral-7b]
+    deployments: [groq-qwen3-27b, nvidia-mistral-large, openrouter-gemma-4-31b, ollama-mistral-7b]
   embed:
     # All deployments of an embedding alias must produce the same vector size.
     kind: embedding
@@ -99,3 +121,9 @@ aliases:
     kind: embedding
     description: Gemini text embeddings (768-d)
     deployments: [gemini-embedding]
+  embed-nvidia:
+    # NVIDIA Nemotron embeddings (2048-d). Asymmetric: set EMBED_DOCUMENT_INPUT_TYPE=passage
+    # and EMBED_QUERY_INPUT_TYPE=query, with empty EMBED_*_PREFIX values.
+    kind: embedding
+    description: NVIDIA Nemotron embeddings (2048-d)
+    deployments: [nvidia-nemotron-embed]

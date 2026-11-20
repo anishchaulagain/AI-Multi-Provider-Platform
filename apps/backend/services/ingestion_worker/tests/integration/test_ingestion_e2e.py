@@ -3,11 +3,11 @@ import json
 import uuid
 
 import aio_pika
+import asyncpg
 import pymupdf
-from minio import Minio
 from qdrant_client import AsyncQdrantClient
 
-from integration.conftest import ENV, TAG, Stack
+from integration.conftest import ENV, TAG, Stack, _dsn, upload_keys
 from platform_rag.store import ChunkStore
 
 
@@ -55,6 +55,10 @@ async def test_pdf_upload_reaches_ready_with_chunks_in_qdrant(stack: Stack) -> N
     graph = ready["details"]["graph"]
     assert graph["status"] == "ok" and graph["entities"] == 2 and graph["relations"] == 1
     assert ready["ingested_at"] is not None
+    assert ready["details"]["embed_model"] == TAG
+    # Only chunks and embeddings are kept: the uploaded file is gone.
+    me = await _me(stack)
+    assert await upload_keys(f"{me['tenant_id']}/{doc['id']}/") == []
 
     chunks = (
         await stack.client.get(
@@ -144,28 +148,57 @@ async def test_delete_removes_chunks_and_file(stack: Stack) -> None:
     await qdrant.close()
     assert count == 0
 
-    endpoint = ENV["s3_endpoint"].split("://", 1)[1]
-    minio = Minio(endpoint, ENV["s3_access_key"], ENV["s3_secret_key"], secure=False)
-    objects = await asyncio.to_thread(
-        lambda: list(minio.list_objects(TAG, prefix=f"{me['tenant_id']}/{doc_id}/", recursive=True))
-    )
-    assert objects == []
+    assert await upload_keys(f"{me['tenant_id']}/{doc_id}/") == []
 
 
-async def test_reingest_after_failure(stack: Stack) -> None:
+async def test_failed_document_is_redone_by_uploading_it_again(stack: Stack) -> None:
     stack.gateway.embed_failures = 99  # exhaust both retries
     await stack.start_worker()
-    doc_id = (await stack.upload("retry.txt", b"Eventually this works.")).json()["id"]
+    data = b"Eventually this works."
+    doc_id = (await stack.upload("retry.txt", data)).json()["id"]
     failed = await stack.wait_for(doc_id, {"failed"})
     assert failed["attempts"] == 3
 
-    stack.gateway.embed_failures = 0
+    # The original was discarded with the failure, so reingest can't redo it.
     response = await stack.client.post(
         f"/api/v1/documents/{doc_id}/reingest", headers=stack.headers
     )
-    assert response.status_code == 202
+    assert response.status_code == 409
+    assert response.json()["error"]["details"]["reason"] == "original_discarded"
+
+    stack.gateway.embed_failures = 0
+    again = await stack.upload("retry.txt", data)
+    assert again.status_code == 200 and again.json()["id"] == doc_id
     ready = await stack.wait_for(doc_id, {"ready"})
     assert ready["attempts"] == 1
+
+
+async def test_upload_under_a_new_embedding_model_is_reprocessed(stack: Stack) -> None:
+    await stack.start_worker()
+    data = b"Embedded once, then the embedding model changes."
+    doc_id = (await stack.upload("model.txt", data)).json()["id"]
+    await stack.wait_for(doc_id, {"ready"})
+    calls = stack.gateway.embed_calls
+
+    # Same model: a duplicate upload is a no-op.
+    await stack.upload("model.txt", data)
+    await asyncio.sleep(0.5)
+    assert stack.gateway.embed_calls == calls
+
+    # Simulate a document embedded by an earlier model.
+    conn = await asyncpg.connect(_dsn(ENV["database_url"]))
+    try:
+        await conn.execute(
+            'UPDATE documents SET details = details || \'{"embed_model": "old"}\' WHERE id = $1',
+            uuid.UUID(doc_id),
+        )
+    finally:
+        await conn.close()
+    # Re-queued (status QUEUED) before the response returns.
+    assert (await stack.upload("model.txt", data)).json()["status"] == "queued"
+    ready = await stack.wait_for(doc_id, {"ready"})
+    assert ready["details"]["embed_model"] == TAG
+    assert stack.gateway.embed_calls > calls
 
 
 async def _me(stack: Stack) -> dict[str, str]:

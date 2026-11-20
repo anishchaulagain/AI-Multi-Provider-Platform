@@ -69,12 +69,6 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-packages --locked
 
-      # Service containers can't take a command, so MinIO is started here.
-      - name: Start MinIO
-        run: |
-          docker run -d --name minio -p 9000:9000             -e MINIO_ROOT_USER=platform -e MINIO_ROOT_PASSWORD=platform-minio             pgsty/minio:latest server /data
-          timeout 60 bash -c 'until curl -sf http://localhost:9000/minio/health/live; do sleep 1; done'
-
       - name: Ruff
         run: |
           uv run ruff check .

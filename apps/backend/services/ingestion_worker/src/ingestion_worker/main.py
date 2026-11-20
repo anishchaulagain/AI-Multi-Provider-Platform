@@ -14,7 +14,7 @@ from ingestion_worker.config import WorkerSettings, get_settings
 from ingestion_worker.processor import DocumentProcessor
 from llm_client import GatewayClient
 from platform_core.logging import configure_logging
-from platform_core.storage import BlobStore, MinioBlobStore
+from platform_core.storage import BlobStore, build_blob_store
 from platform_db.session import create_engine, create_sessionmaker
 from platform_graph import GraphStore
 from platform_history import TokenCounter, TurnStore
@@ -73,14 +73,18 @@ async def build_worker(
         sessionmaker=create_sessionmaker(engine),
         redis=redis,
         blobs=blobs
-        or MinioBlobStore(
-            settings.s3_endpoint,
-            settings.s3_access_key,
-            settings.s3_secret_key.get_secret_value(),
-            settings.s3_bucket,
+        or build_blob_store(
+            settings.blob_store,
+            redis_url=settings.redis_url,
+            retention_hours=settings.upload_retention_hours,
+            s3_endpoint=settings.s3_endpoint,
+            s3_access_key=settings.s3_access_key,
+            s3_secret_key=settings.s3_secret_key.get_secret_value(),
+            s3_bucket=settings.s3_bucket,
         ),
         store=store,
         graph=graph_store,
+        embed_model=settings.embed_model_name,
         pipeline=IngestionPipeline(
             gateway,
             store,
@@ -91,6 +95,7 @@ async def build_worker(
                 embed_alias=settings.embed_alias,
                 embed_batch_size=settings.embed_batch_size,
                 embed_document_prefix=settings.embed_document_prefix,
+                embed_input_type=settings.embed_document_input_type,
                 extract_metadata=settings.extract_metadata,
                 extract_alias=settings.extract_alias,
                 max_chunks=settings.max_chunks,
@@ -121,6 +126,7 @@ async def build_worker(
         keep_recent=settings.history_keep_recent,
         embed_alias=settings.embed_alias,
         embed_prefix=settings.embed_document_prefix,
+        embed_input_type=settings.embed_document_input_type,
     )
     compaction = RetryingConsumer(
         settings.rabbitmq_url,
