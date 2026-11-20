@@ -7,6 +7,7 @@ import {
   Loader2,
   MessageSquarePlus,
   Send,
+  Share2,
   Square,
   Trash2,
 } from "lucide-react";
@@ -103,6 +104,15 @@ function UsageLine({ usage }: { usage: ChatUsage }) {
       {usage.retrieval_ms?.total !== undefined && (
         <Badge variant="outline">retrieval {usage.retrieval_ms.total} ms</Badge>
       )}
+      {usage.history && usage.history.raw_history_tokens > 0 && (
+        <Badge
+          variant="secondary"
+          title={`History: ${usage.history.recent_turns} recent, ${usage.history.recalled_turns} recalled turns; full replay would be ${usage.history.raw_history_tokens} tokens`}
+        >
+          history {usage.history.sent_history_tokens} sent ·{" "}
+          {Math.round(usage.history.history_tokens_saved_ratio * 100)}% saved
+        </Badge>
+      )}
     </div>
   );
 }
@@ -120,6 +130,8 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState<Citation | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -150,6 +162,37 @@ export default function ChatPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
+
+  useEffect(() => {
+    if (!token) return;
+    const id = new URLSearchParams(window.location.search).get("c");
+    if (!id) return;
+    api
+      .getConversation(token, id)
+      .then((c) => open(c))
+      .catch((err) => fail(err, "Conversation not found"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per token
+  }, [token]);
+
+  async function share() {
+    if (!token || !active) return;
+    setSharing(true);
+    setError(null);
+    try {
+      const capsule = await api.createCapsule(token, active.id);
+      const link = `${window.location.origin}/app/capsules/${encodeURIComponent(capsule.share_token)}`;
+      try {
+        await navigator.clipboard.writeText(link);
+        setNotice(`Capsule link copied (${capsule.token_count} tokens).`);
+      } catch {
+        setNotice(`Capsule created: ${link}`);
+      }
+    } catch (err) {
+      fail(err, "Could not create a capsule");
+    } finally {
+      setSharing(false);
+    }
+  }
 
   async function open(conversation: Conversation) {
     if (!token) return;
@@ -325,19 +368,42 @@ export default function ChatPage() {
 
       <section className="flex min-w-0 flex-1 flex-col gap-3">
         <div className="flex items-center justify-between gap-2">
-          <h1 className="truncate text-xl font-semibold">
-            {active?.title ?? "Chat with your documents"}
-          </h1>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!active}
-            onClick={() => setFilterOpen(true)}
-          >
-            <Filter /> {filterLabel}
-          </Button>
+          <div className="flex min-w-0 items-center gap-2">
+            <h1 className="truncate text-xl font-semibold">
+              {active?.title ?? "Chat with your documents"}
+            </h1>
+            {active?.alias && <Badge variant="outline">{active.alias}</Badge>}
+            {active?.capsule_id && (
+              <Badge variant="secondary">from capsule</Badge>
+            )}
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!active || messages.length === 0 || sharing}
+              onClick={share}
+              title="Create a shareable context capsule and copy its link"
+            >
+              {sharing ? <Loader2 className="animate-spin" /> : <Share2 />}{" "}
+              Share
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!active}
+              onClick={() => setFilterOpen(true)}
+            >
+              <Filter /> {filterLabel}
+            </Button>
+          </div>
         </div>
 
+        {notice && (
+          <Alert>
+            <AlertDescription>{notice}</AlertDescription>
+          </Alert>
+        )}
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>

@@ -8,7 +8,7 @@ from llm_client import GatewayError
 from platform_api.api.deps import AdminPrincipal, CurrentPrincipal, DbSession, ResourcesDep
 from platform_api.api.routes.llm import to_app_error
 from platform_api.schemas.usage import AliasUsage, UsageSummary
-from platform_db.models import LlmUsage
+from platform_db.models import LlmUsage, Message
 
 router = APIRouter(tags=["usage"])
 
@@ -48,6 +48,20 @@ async def usage_summary(
         for alias, requests, tokens, hits, errors, latency in rows
     ]
 
+    history = Message.usage["history"]
+    raw_tokens, sent_tokens = (
+        await session.execute(
+            select(
+                func.coalesce(func.sum(history["raw_history_tokens"].as_integer()), 0),
+                func.coalesce(func.sum(history["sent_history_tokens"].as_integer()), 0),
+            ).where(
+                Message.tenant_id == principal.tenant_id,
+                Message.role == "assistant",
+                Message.created_at >= since,
+            )
+        )
+    ).one()
+
     quota: dict[str, Any] = {}
     try:
         quota = await resources.gateway.tenant_quota(principal.tenant_id)
@@ -63,6 +77,11 @@ async def usage_summary(
         by_alias=by_alias,
         tokens_used_today=quota.get("used_today"),
         daily_token_limit=quota.get("daily_limit"),
+        history_tokens_raw=int(raw_tokens),
+        history_tokens_sent=int(sent_tokens),
+        history_tokens_saved_ratio=(
+            round(1 - int(sent_tokens) / int(raw_tokens), 4) if raw_tokens else 0.0
+        ),
     )
 
 

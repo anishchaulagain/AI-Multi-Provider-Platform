@@ -20,3 +20,7 @@ class UsageSummary(BaseModel):
     # From the gateway's live quota counters (None if the gateway is unreachable).
     tokens_used_today: int | None = None
     daily_token_limit: int | None = None
+    # Chat history: what full replay would have cost vs. what was sent.
+    history_tokens_raw: int = 0
+    history_tokens_sent: int = 0
+    history_tokens_saved_ratio: float = 0.0

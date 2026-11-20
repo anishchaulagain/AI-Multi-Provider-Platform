@@ -9,14 +9,16 @@ import structlog
 from qdrant_client import AsyncQdrantClient
 from redis.asyncio import Redis
 
+from ingestion_worker.compactor import Compactor
 from ingestion_worker.config import WorkerSettings, get_settings
 from ingestion_worker.processor import DocumentProcessor
 from llm_client import GatewayClient
 from platform_core.logging import configure_logging
-from platform_core.storage import BlobStore, MinioBlobStore
+from platform_core.storage import BlobStore, build_blob_store
 from platform_db.session import create_engine, create_sessionmaker
 from platform_graph import GraphStore
-from platform_messaging import IngestDocumentJob, RetryingConsumer
+from platform_history import TokenCounter, TurnStore
+from platform_messaging import CompactConversationJob, IngestDocumentJob, RetryingConsumer
 from platform_rag.ingest import IngestionPipeline, PipelineConfig
 from platform_rag.store import ChunkStore
 
@@ -27,6 +29,16 @@ logger = structlog.get_logger(__name__)
 class Worker:
     processor: DocumentProcessor
     consumer: RetryingConsumer[IngestDocumentJob]
+    compactor: Compactor
+    compaction: RetryingConsumer[CompactConversationJob]
+
+    async def start(self) -> None:
+        await self.consumer.start()
+        await self.compaction.start()
+
+    async def stop(self, timeout: float) -> None:
+        await self.compaction.stop(timeout=timeout)
+        await self.consumer.stop(timeout=timeout)
 
 
 @asynccontextmanager
@@ -61,14 +73,18 @@ async def build_worker(
         sessionmaker=create_sessionmaker(engine),
         redis=redis,
         blobs=blobs
-        or MinioBlobStore(
-            settings.s3_endpoint,
-            settings.s3_access_key,
-            settings.s3_secret_key.get_secret_value(),
-            settings.s3_bucket,
+        or build_blob_store(
+            settings.blob_store,
+            redis_url=settings.redis_url,
+            retention_hours=settings.upload_retention_hours,
+            s3_endpoint=settings.s3_endpoint,
+            s3_access_key=settings.s3_access_key,
+            s3_secret_key=settings.s3_secret_key.get_secret_value(),
+            s3_bucket=settings.s3_bucket,
         ),
         store=store,
         graph=graph_store,
+        embed_model=settings.embed_model_name,
         pipeline=IngestionPipeline(
             gateway,
             store,
@@ -79,6 +95,7 @@ async def build_worker(
                 embed_alias=settings.embed_alias,
                 embed_batch_size=settings.embed_batch_size,
                 embed_document_prefix=settings.embed_document_prefix,
+                embed_input_type=settings.embed_document_input_type,
                 extract_metadata=settings.extract_metadata,
                 extract_alias=settings.extract_alias,
                 max_chunks=settings.max_chunks,
@@ -98,8 +115,35 @@ async def build_worker(
         prefetch=settings.prefetch,
         job_timeout_s=settings.job_timeout_seconds,
     )
+    compactor = Compactor(
+        sessionmaker=create_sessionmaker(engine),
+        redis=redis,
+        gateway=gateway,
+        turns=TurnStore(qdrant_client, settings.embed_model_name),
+        counter=TokenCounter(),
+        summary_alias=settings.summary_alias,
+        summary_max_tokens=settings.summary_max_tokens,
+        keep_recent=settings.history_keep_recent,
+        embed_alias=settings.embed_alias,
+        embed_prefix=settings.embed_document_prefix,
+        embed_input_type=settings.embed_document_input_type,
+    )
+    compaction = RetryingConsumer(
+        settings.rabbitmq_url,
+        settings.history_queue(),
+        CompactConversationJob,
+        compactor.handle,
+        on_failure=compactor.on_failure,
+        prefetch=settings.prefetch,
+        job_timeout_s=settings.job_timeout_seconds,
+    )
     try:
-        yield Worker(processor=processor, consumer=consumer)
+        yield Worker(
+            processor=processor,
+            consumer=consumer,
+            compactor=compactor,
+            compaction=compaction,
+        )
     finally:
         await gateway.aclose()
         if graph is None and graph_store is not None:
@@ -120,13 +164,13 @@ async def run(settings: WorkerSettings) -> None:
             pass
 
     async with build_worker(settings) as worker:
-        await worker.consumer.start()
+        await worker.start()
         logger.info("worker_ready", environment=settings.environment)
         try:
             await stop.wait()
         finally:
             logger.info("worker_stopping")
-            await worker.consumer.stop(timeout=settings.job_timeout_seconds)
+            await worker.stop(timeout=settings.job_timeout_seconds)
 
 
 def main() -> None:

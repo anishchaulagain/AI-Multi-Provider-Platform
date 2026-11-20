@@ -1,7 +1,7 @@
 """End-to-end: Platform API + ingestion worker in one event loop, against real
-Postgres, Redis, RabbitMQ, MinIO and Qdrant. Only the AI Gateway is faked.
+Postgres, Redis, RabbitMQ, Qdrant and Neo4j. Only the AI Gateway is faked.
 
-Isolation: its own database, Redis DB, exchange/queues, bucket and Qdrant collection,
+Isolation: its own database, Redis DB, exchange/queues and Qdrant collection,
 all removed afterwards. Skipped when any service is unreachable.
 """
 
@@ -22,7 +22,6 @@ import httpx
 import pytest
 from alembic import command
 from alembic.config import Config
-from minio import Minio
 from qdrant_client import AsyncQdrantClient
 from redis.asyncio import Redis
 from sqlalchemy.engine import make_url
@@ -53,10 +52,7 @@ ENV: dict[str, Any] = {
     "redis_url": os.getenv("TEST_INGEST_REDIS_URL", "redis://localhost:6379/14"),
     "rabbitmq_url": os.getenv("TEST_RABBITMQ_URL", "amqp://platform:platform@localhost:5672/"),
     "qdrant_url": os.getenv("TEST_QDRANT_URL", "http://localhost:6333"),
-    "s3_endpoint": os.getenv("TEST_S3_ENDPOINT", "http://localhost:9000"),
-    "s3_access_key": os.getenv("TEST_S3_ACCESS_KEY", "platform"),
-    "s3_secret_key": os.getenv("TEST_S3_SECRET_KEY", "platform-minio"),
-    "s3_bucket": TAG,
+    "blob_store": "redis",
     "ingest_exchange": TAG,
     "ingest_retry_delays_ms": (300, 600),
     "embed_model_name": TAG,
@@ -149,7 +145,6 @@ async def _reachable() -> str | None:
         "redis": lambda: Redis.from_url(ENV["redis_url"]).ping(),
         "rabbitmq": lambda: aio_pika.connect(ENV["rabbitmq_url"], timeout=3),
         "qdrant": lambda: AsyncQdrantClient(url=ENV["qdrant_url"], timeout=3).get_collections(),
-        "minio": lambda: asyncio.to_thread(_minio().list_buckets),
         "neo4j": _neo4j_ping,
     }
     for name, check in checks.items():
@@ -170,14 +165,13 @@ async def _neo4j_ping() -> None:
         await graph.close()
 
 
-def _minio() -> Minio:
-    url = make_url(f"x://{ENV['s3_endpoint'].split('://', 1)[1]}")
-    return Minio(
-        f"{url.host}:{url.port}",
-        access_key=ENV["s3_access_key"],
-        secret_key=ENV["s3_secret_key"],
-        secure=False,
-    )
+async def upload_keys(prefix: str) -> list[bytes]:
+    """Uploaded files still held in the transient blob store."""
+    redis = Redis.from_url(ENV["redis_url"])
+    try:
+        return [k async for k in redis.scan_iter(match=f"upload:{prefix}*")]
+    finally:
+        await redis.aclose()
 
 
 @pytest.fixture(scope="session")
@@ -201,7 +195,7 @@ async def infra() -> AsyncGenerator[None]:
 
     yield
 
-    # Teardown: queues/exchanges, collection, bucket.
+    # Teardown: queues/exchanges, collection, uploads.
     connection = await aio_pika.connect(ENV["rabbitmq_url"])
     async with connection:
         channel = await connection.channel()
@@ -220,14 +214,9 @@ async def infra() -> AsyncGenerator[None]:
             await qdrant.delete_collection(collection.name)
     await qdrant.close()
 
-    def drop_bucket() -> None:
-        client = _minio()
-        if client.bucket_exists(TAG):
-            for obj in client.list_objects(TAG, recursive=True):
-                client.remove_object(TAG, obj.object_name or "")
-            client.remove_bucket(TAG)
-
-    await asyncio.to_thread(drop_bucket)
+    redis = Redis.from_url(ENV["redis_url"])
+    await redis.flushdb()
+    await redis.aclose()
 
 
 @pytest.fixture

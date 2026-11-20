@@ -178,7 +178,7 @@ The full transcript is always kept in Postgres, so compression never loses data.
 - [x] **2. AI Gateway:** LiteLLM aliases, fallbacks, circuit breaker, semantic cache, quotas
 - [x] **3. Ingestion:** upload, queue with retry and DLQ, LlamaIndex pipeline, vector store, live status
 - [x] **4. GraphRAG:** Neo4j graph, hybrid and graph retrieval, rerank, cited streaming answers
-- [ ] **5. History:** context builder, compaction, semantic recall, context capsules
+- [x] **5. History:** context builder, compaction, semantic recall, context capsules
 - [ ] **6. Evaluation:** online judge, offline datasets, CI quality gates, feedback
 - [ ] **7. Frontend:** chat, documents, graph explorer, evals dashboard, admin
 - [ ] **8. Production:** Helm and KEDA, dashboards, load tests, release pipeline, runbooks

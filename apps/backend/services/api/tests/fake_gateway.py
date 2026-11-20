@@ -37,7 +37,10 @@ class FakeGateway:
     rag_answer: str = "Qdrant is written in Rust [1]. Invented [9]."
     rewrite_reply: str = "What is Qdrant written in?"
     rag_prompts: list[str] = field(default_factory=list)
+    # Full request bodies of grounded chats (to inspect the history that was sent).
+    rag_bodies: list[dict[str, Any]] = field(default_factory=list)
     rewrites: int = 0
+    summaries: int = 0
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -71,8 +74,26 @@ class FakeGateway:
                 headers={**META, "X-Gateway-Alias": "embed"},
             )
         last = str(body["messages"][-1].get("content", ""))
+        everything = json.dumps(body["messages"])
+        if not body.get("stream") and "long-term memory of a conversation" in everything:
+            # Summarization: carry forward every FACT-xxx marker seen in the prompt.
+            self.summaries += 1
+            facts = sorted(set(re.findall(r"FACT-\w+", last)))
+            reply = {
+                "summary": "Summary: " + (", ".join(facts) or "small talk"),
+                "memory": {
+                    "add": [{"category": "entities", "text": f"Mentioned {f}"} for f in facts]
+                },
+            }
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [{"message": {"role": "assistant", "content": json.dumps(reply)}}]
+                },
+            )
         if body.get("stream") and last.startswith("Sources:"):
             self.rag_prompts.append(last)
+            self.rag_bodies.append(body)
             words = self.rag_answer.split(" ")
             chunks: list[dict[str, Any]] = [
                 {

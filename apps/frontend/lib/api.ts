@@ -424,6 +424,8 @@ export type Conversation = {
   id: string;
   title: string;
   doc_ids: string[];
+  alias: string | null;
+  capsule_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -446,6 +448,46 @@ export type ChatUsage = {
   gateway?: Partial<GatewayMeta>;
   retrieval_ms?: Record<string, number>;
   sources?: number;
+  history?: HistoryStats;
+};
+
+export type HistoryStats = {
+  window: number;
+  raw_history_tokens: number;
+  sent_history_tokens: number;
+  history_tokens_saved_ratio: number;
+  recent_turns: number;
+  recalled_turns: number;
+  dropped_turns: number;
+};
+
+export type Capsule = {
+  id: string;
+  title: string;
+  share_token: string;
+  token_count: number;
+  source_model: string | null;
+  source_conversation_id: string | null;
+  content: {
+    summary: string;
+    memory: Record<string, { text: string; source_msg_ids: string[] }[]>;
+    key_exchanges: { question: string; answer: string }[];
+    citations: { doc_id: string; chunk_id: string }[];
+    message_count: number;
+  };
+  expires_at: string | null;
+  created_at: string;
+};
+
+export type CapsuleView = Capsule & {
+  resolved_citations: {
+    doc_id: string;
+    chunk_id: string;
+    missing: boolean;
+    doc_title: string | null;
+    page: number | null;
+    snippet: string | null;
+  }[];
 };
 
 export type Message = {
@@ -619,6 +661,29 @@ export const api = {
     request<Message[]>(`${API_V1}/conversations/${id}/messages`, { token }),
 
   chatInConversation,
+
+  createCapsule: (token: string, conversationId: string, title?: string) =>
+    request<Capsule>(`${API_V1}/conversations/${conversationId}/capsules`, {
+      method: "POST",
+      token,
+      json: { title: title ?? null },
+    }),
+
+  getCapsule: (token: string, shareToken: string) =>
+    request<CapsuleView>(
+      `${API_V1}/capsules/${encodeURIComponent(shareToken)}`,
+      { token },
+    ),
+
+  forkCapsule: (token: string, capsuleId: string, alias?: string | null) =>
+    request<Conversation>(`${API_V1}/capsules/${capsuleId}/fork`, {
+      method: "POST",
+      token,
+      json: { alias: alias ?? null },
+    }),
+
+  getConversation: (token: string, id: string) =>
+    request<Conversation>(`${API_V1}/conversations/${id}`, { token }),
 
   // /readyz returns 503 with a body when not ready; surface the body either way.
   readiness: async (): Promise<Readiness> => {

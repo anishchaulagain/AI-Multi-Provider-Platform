@@ -69,12 +69,6 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-packages --locked
 
-      # Service containers can't take a command, so MinIO is started here.
-      - name: Start MinIO
-        run: |
-          docker run -d --name minio -p 9000:9000             -e MINIO_ROOT_USER=platform -e MINIO_ROOT_PASSWORD=platform-minio             pgsty/minio:latest server /data
-          timeout 60 bash -c 'until curl -sf http://localhost:9000/minio/health/live; do sleep 1; done'
-
       - name: Ruff
         run: |
           uv run ruff check .
@@ -83,7 +77,7 @@ jobs:
       - name: Mypy
         run: |
           uv run mypy libs/core/src libs/db/src
-          for m in libs/llm_client libs/messaging libs/graph libs/rag services/gateway services/api services/ingestion_worker; do
+          for m in libs/llm_client libs/messaging libs/graph libs/history libs/rag services/gateway services/api services/ingestion_worker; do
             (cd $m && uv run mypy --config-file ../../pyproject.toml src tests)
           done
 
@@ -96,7 +90,7 @@ jobs:
 
       - name: Tests
         run: |
-          for m in libs/llm_client libs/messaging libs/graph libs/rag services/gateway services/api services/ingestion_worker; do
+          for m in libs/llm_client libs/messaging libs/graph libs/history libs/rag services/gateway services/api services/ingestion_worker; do
             echo "== $m"
             (cd $m && uv run pytest -v)
           done

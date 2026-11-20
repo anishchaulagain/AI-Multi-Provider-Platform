@@ -158,6 +158,13 @@ async def upload(
     content_hash = hashlib.sha256(data).hexdigest()
     existing = await _by_hash(session, tenant_id, content_hash)
     if existing is not None:
+        if _needs_reprocessing(existing, settings.embed_model_name):
+            # The original isn't kept after processing, so uploading the same file
+            # again is how a failed or outdated (other embedding model) one is redone.
+            await resources.blobs.put(existing.storage_key, data, existing.content_type)
+            await reingest(
+                session, resources, existing, request_id=request_id, traceparent=traceparent
+            )
         return existing, False
 
     doc_id = uuid7()
@@ -216,6 +223,14 @@ async def _by_hash(
     ).scalar_one_or_none()
 
 
+def _needs_reprocessing(doc: Document, embed_model: str) -> bool:
+    if doc.status == DocumentStatus.FAILED:
+        return True
+    # Documents ingested before the model was recorded count as outdated.
+    used = (doc.details or {}).get("embed_model")
+    return doc.status == DocumentStatus.READY and used != embed_model
+
+
 async def reingest(
     session: AsyncSession,
     resources: Resources,
@@ -226,6 +241,11 @@ async def reingest(
 ) -> Document:
     if doc.status not in (DocumentStatus.READY, DocumentStatus.FAILED):
         raise ConflictError(f"Document is already being processed (status: {doc.status})")
+    if not await resources.blobs.exists(doc.storage_key):
+        raise ConflictError(
+            "The original file is not kept after processing; upload it again to re-ingest",
+            details={"reason": "original_discarded"},
+        )
     doc.status = DocumentStatus.QUEUED
     doc.error = None
     doc.attempts = 0

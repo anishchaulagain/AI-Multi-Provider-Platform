@@ -12,6 +12,8 @@ libs/
   messaging/   platform_messaging: RabbitMQ topology, publisher, retrying consumer,
                job contracts, Redis status events, trace headers
   graph/       platform_graph: Neo4j schema, tenant-scoped graph store, entity/relation extraction
+  history/     platform_history: token-budgeted context builder, compaction (summary + memory),
+               semantic recall of older turns, context capsules
   rag/         platform_rag: Qdrant chunk store, BM25, hybrid retrieval, reranking (`[rerank]`),
                cited-answer prompt and citation validation; [ingest] extra adds
                parsing, chunking, BM25, metadata extraction and the ingestion pipeline
@@ -69,6 +71,9 @@ uv run python -m ingestion_worker
 | `GET /api/v1/conversations/{id}/messages` | Turns, with citations resolved to the cited chunk text |
 | `POST /api/v1/conversations/{id}/chat` | Grounded answer over SSE: `token`…, `citations`, `usage`, `done` |
 | `GET /api/v1/graph/entities?q=`, `GET /api/v1/graph/neighborhood/{entity_id}?hops=1` | Entity search and subgraph for the explorer |
+| `POST /api/v1/conversations/{id}/capsules` | Snapshot a conversation as an immutable context capsule with a signed share token |
+| `GET /api/v1/capsules`, `GET /api/v1/capsules/{share_token}`, `DELETE /api/v1/capsules/{id}` | Your capsules; read-only view by share link (same workspace, unexpired) |
+| `POST /api/v1/capsules/{id}/fork` | New conversation seeded with the capsule, optionally on another `alias` |
 
 The LLM endpoints work with the OpenAI SDKs:
 
@@ -126,6 +131,21 @@ question -> rewrite to a standalone query (chat-fast, last two turns)
 - **Graph:** the worker's `graphing` stage writes `(Document)-[:HAS_CHUNK]->(Chunk)-[:MENTIONS]->(Entity)-[:RELATES {type, doc_id}]->(Entity)` and `[:NEXT]` chain edges. Entities with the same normalized name and type are merged. Facts carry their `doc_id`, so deleting or re-ingesting a document removes exactly its facts, and entities nothing mentions anymore are deleted.
 - **Persistence:** messages store citations as chunk ids only (never context text), plus the retrieval trace (rewritten query, ranks and scores, graph seeds and facts, timings) and token usage.
 - **Degrading gracefully:** if Neo4j is down, answers come from vectors alone; if the reranker fails, the fused order is kept. Both cases are recorded in the trace.
+
+### Conversation history
+
+Every chat request builds its prompt within a token budget: `min(alias context window, HISTORY_MAX_CONTEXT_TOKENS)`, split as
+
+| system | memory facts | rolling summary | semantic recall | recent turns | documents | answer |
+|---|---|---|---|---|---|---|
+| 5% | ≤5% | ≤10% | ≤10% | ≤20% | ~35% + unused | 15% |
+
+- **Compression** before slotting: citation markup stripped, long code blocks collapsed to `[code: lang, n lines, msg#id]`, a repeated question supersedes the earlier exchange, and retrieved document text is never replayed (messages store only answers and chunk ids).
+- **Stable order** (system → memory + summary → recall → recent turns), so the long-lived prefix stays identical between requests.
+- **Recent window:** at most `HISTORY_MAX_RECENT_MESSAGES` (10) newest messages, verbatim.
+- **Compaction** runs in the worker (`history.compact` queue) once 10 messages are unsummarized or they exceed `HISTORY_COMPACT_THRESHOLD` (1,500 tokens). The `summarize` alias folds older turns into a summary capped at 300 tokens and returns a validated memory patch, and turn pairs are embedded into Qdrant `conversation_turns_<model>` for recall. The newest `HISTORY_KEEP_RECENT` (6) messages stay verbatim.
+- **Capsules** hold the summary, memory facts, key Q/A pairs and citation refs (typically 200–600 tokens). They can be shared by signed link, forked onto another model, or attached to one request with `context_capsule_id` for agent handoff.
+- **Metrics:** each answer's `usage.history` records `raw_history_tokens` (full replay) against `sent_history_tokens`; `/usage/summary` reports `history_tokens_saved_ratio`.
 
 ## Test & lint
 

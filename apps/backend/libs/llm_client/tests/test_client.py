@@ -156,3 +156,18 @@ async def test_judge_parses_json_even_in_fences() -> None:
 
 async def _no_sleep(_: float) -> None:
     return None
+
+
+async def test_embed_sends_input_type_only_when_set() -> None:
+    bodies: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json={"data": [{"index": 0, "embedding": [0.1]}]})
+
+    async with _client(handler) as client:
+        await client.embed("q", caller=CALLER, model="embed-nvidia", input_type="query")
+        await client.embed("d", caller=CALLER)
+
+    assert bodies[0] == {"model": "embed-nvidia", "input": "q", "input_type": "query"}
+    assert "input_type" not in bodies[1]

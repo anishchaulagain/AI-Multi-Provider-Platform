@@ -14,3 +14,9 @@ class IngestDocumentJob(BaseModel):
     filename: str
     content_type: str
     content_hash: str
+
+
+class CompactConversationJob(BaseModel):
+    version: Literal[1] = 1
+    conversation_id: uuid.UUID
+    tenant_id: uuid.UUID

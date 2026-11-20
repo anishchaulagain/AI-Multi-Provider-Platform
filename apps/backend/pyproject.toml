@@ -33,6 +33,7 @@ known-first-party = [
     "platform_messaging",
     "platform_rag",
     "platform_graph",
+    "platform_history",
     "llm_client",
     "platform_api",
     "gateway",

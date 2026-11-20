@@ -23,6 +23,12 @@ class Conversation(IdMixin, TimestampMixin, TenantScopedMixin, Base):
     title: Mapped[str] = mapped_column(String(200), default="New conversation")
     # Restrict retrieval to these documents; empty means all of the tenant's documents.
     doc_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    # Answer with this gateway alias instead of the default (set when forking a capsule).
+    alias: Mapped[str | None] = mapped_column(String(64))
+    # Seeded from a context capsule: its summary and facts are part of every prompt.
+    capsule_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("context_capsules.id", ondelete="SET NULL", use_alter=True)
+    )
 
 
 class Message(IdMixin, TenantScopedMixin, Base):

@@ -26,6 +26,8 @@ def make_settings(**overrides: object) -> Settings:
         # Integration tests inject fakes; no model downloads or Neo4j needed.
         "reranker": "none",
         "graph_enabled": False,
+        # Compaction jobs go to a test-only queue, never to a real worker's queue.
+        "history_exchange": "test-history",
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)  # type: ignore[arg-type]

@@ -10,14 +10,17 @@ from platform_rag.retrieve import RetrievalResult, Turn
 
 NO_ANSWER = "I don't know based on the provided documents."
 
-SYSTEM_PROMPT = f"""You are a careful assistant that answers questions using only the \
-numbered sources provided.
+SYSTEM_PROMPT = f"""You are a careful assistant that answers questions using the \
+numbered document sources provided, and this conversation's own history.
 
 Rules:
-- Support every factual statement with citations like [1] or [2][3], placed right \
-after the statement they support. Cite only source numbers that appear below.
-- Use only information from the sources. Do not rely on prior knowledge.
-- If the sources do not contain the answer, reply exactly: "{NO_ANSWER}"
+- Support every factual statement taken from the documents with citations like [1] \
+or [2][3], placed right after the statement. Cite only source numbers that appear below.
+- For questions about the conversation itself (what the user said, decided or asked \
+earlier), answer from the conversation history, memory and summary; no citation needed.
+- Do not rely on prior knowledge.
+- If neither the sources nor the conversation contain the answer, reply exactly: \
+"{NO_ANSWER}"
 - "Graph facts" are relationships extracted from the same documents; use them as \
 hints, but cite the numbered source that states the fact.
 - Be concise. Use the language of the question."""
@@ -77,12 +80,18 @@ def format_sources(result: RetrievalResult) -> str:
 
 
 def build_messages(
-    question: str, result: RetrievalResult, history: Sequence[Turn] = ()
+    question: str,
+    result: RetrievalResult,
+    history: Sequence[ChatMessage | Turn] = (),
 ) -> list[ChatMessage]:
+    """System prompt, then the (already budgeted) history, then sources + question.
+    History comes from the context builder; sources stay the only evidence."""
     messages = [ChatMessage(role="system", content=SYSTEM_PROMPT)]
-    # Recent turns give conversational continuity; sources stay the only evidence.
-    for turn in list(history)[-4:]:
-        messages.append(ChatMessage(role=turn.role, content=turn.content[:2000]))
+    for item in history:
+        if isinstance(item, ChatMessage):
+            messages.append(item)
+        else:
+            messages.append(ChatMessage(role=item.role, content=item.content[:2000]))
     messages.append(
         ChatMessage(
             role="user",

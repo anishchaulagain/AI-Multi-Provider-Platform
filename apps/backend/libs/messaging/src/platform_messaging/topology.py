@@ -90,7 +90,22 @@ def ingest_documents_queue(
 
 INGEST_DOCUMENTS = ingest_documents_queue()
 
-WORK_QUEUES: tuple[WorkQueue, ...] = (INGEST_DOCUMENTS,)
+
+def history_compact_queue(
+    exchange: str = "history", retry_delays_ms: tuple[int, ...] = DEFAULT_RETRY_DELAYS_MS
+) -> WorkQueue:
+    """Conversation compaction (rolling summary, memory, recall embeddings)."""
+    return WorkQueue(
+        name=f"{exchange}.compact",
+        exchange=exchange,
+        routing_key="conversations.compact",
+        retry_delays_ms=retry_delays_ms,
+    )
+
+
+HISTORY_COMPACT = history_compact_queue()
+
+WORK_QUEUES: tuple[WorkQueue, ...] = (INGEST_DOCUMENTS, HISTORY_COMPACT)
 
 
 @dataclass

@@ -481,7 +481,8 @@ class GatewayService:
                 continue
             try:
                 data = await self._upstream.post_json(
-                    "/v1/embeddings", {"model": dep.name, "input": request.input}
+                    "/v1/embeddings",
+                    {**request.model_dump(exclude_none=True), "model": dep.name},
                 )
             except UpstreamError as exc:
                 if not exc.retryable:

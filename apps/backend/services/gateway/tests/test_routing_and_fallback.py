@@ -159,6 +159,18 @@ async def test_embeddings(gw: Harness) -> None:
     assert response.headers["x-gateway-deployment"] == "embedder"
 
 
+async def test_embedding_params_are_forwarded(gw: Harness) -> None:
+    # Asymmetric models (NVIDIA Nemotron) need input_type passed through to LiteLLM.
+    response = await gw.client.post(
+        "/v1/embeddings",
+        json={"model": "embed", "input": "a", "input_type": "passage"},
+        headers={"Authorization": f"Bearer {TOKEN}", "X-Tenant-ID": TENANT},
+    )
+    assert response.status_code == 200
+    assert gw.upstream.calls[-1]["input_type"] == "passage"
+    assert gw.upstream.calls[-1]["model"] == "embedder"
+
+
 async def test_chat_alias_rejected_for_embeddings(gw: Harness) -> None:
     response = await gw.client.post(
         "/v1/embeddings",

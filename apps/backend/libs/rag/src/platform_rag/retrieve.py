@@ -43,6 +43,8 @@ class GraphExpander(Protocol):
 class RetrievalConfig:
     embed_alias: str = "embed"
     query_prefix: str = "search_query: "
+    # For asymmetric embedding models (e.g. NVIDIA Nemotron): "query".
+    query_input_type: str | None = None
     rewrite_alias: str = "chat-fast"
     candidates: int = 30  # per list (vector, graph)
     rerank_candidates: int = 20
@@ -180,6 +182,7 @@ class Retriever:
         caller: Caller,
         history: Sequence[Turn] = (),
         doc_ids: Sequence[uuid.UUID] | None = None,
+        context_token_budget: int | None = None,
     ) -> RetrievalResult:
         cfg = self.config
         timings: dict[str, int] = {}
@@ -234,7 +237,12 @@ class Retriever:
                 candidates.sort(key=lambda c: c.rerank or 0.0, reverse=True)
         tick("rerank", started)
 
-        result.chunks = await self._fit_budget(tenant_id, candidates[: cfg.final_k], result.facts)
+        result.chunks = await self._fit_budget(
+            tenant_id,
+            candidates[: cfg.final_k],
+            result.facts,
+            budget=context_token_budget or cfg.context_token_budget,
+        )
         timings["total"] = sum(timings.values())
         result.timings_ms = timings
         return result
@@ -248,7 +256,10 @@ class Retriever:
     ) -> list[StoredChunk]:
         cfg = self.config
         embedded = await self._gateway.embed(
-            f"{cfg.query_prefix}{query}", caller=caller, model=cfg.embed_alias
+            f"{cfg.query_prefix}{query}",
+            caller=caller,
+            model=cfg.embed_alias,
+            input_type=cfg.query_input_type,
         )
         if not embedded.data.data:
             return []
@@ -282,12 +293,17 @@ class Retriever:
         return expansion, None
 
     async def _fit_budget(
-        self, tenant_id: uuid.UUID, ranked: list[RetrievedChunk], facts: list[Fact]
+        self,
+        tenant_id: uuid.UUID,
+        ranked: list[RetrievedChunk],
+        facts: list[Fact],
+        *,
+        budget: int,
     ) -> list[RetrievedChunk]:
         """Keep chunks in rank order within the token budget, then add the neighbors
         of the top chunks (placed right after them) while room remains."""
         cfg = self.config
-        budget = cfg.context_token_budget - sum(estimate_tokens(f.text()) for f in facts)
+        budget = budget - sum(estimate_tokens(f.text()) for f in facts)
         kept: list[RetrievedChunk] = []
         for item in ranked:
             cost = estimate_tokens(item.chunk.text)

@@ -6,6 +6,8 @@
 #   Groq:       curl -H "Authorization: Bearer $GROQ_API_KEY" https://api.groq.com/openai/v1/models
 #   Gemini:     curl "https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY"
 #   OpenRouter: curl https://openrouter.ai/api/v1/models   (ids ending in :free)
+#   NVIDIA:     curl -H "Authorization: Bearer $NVIDIA_API_KEY" https://integrate.api.nvidia.com/v1/models
+#               (many listed models 404 for free keys; probe before adding)
 # Model IDs below were verified on 2026-10-23.
 
 model_list:
@@ -42,6 +44,25 @@ model_list:
     litellm_params:
       model: openrouter/google/gemma-4-26b-a4b-it:free
       api_key: os.environ/OPENROUTER_API_KEY
+
+  # ---- NVIDIA (build.nvidia.com) ----
+  - model_name: nvidia-nemotron-bolt
+    litellm_params:
+      model: nvidia_nim/nvidia/nemotron-3.5-bolt-e4b
+      api_key: os.environ/NVIDIA_API_KEY
+  - model_name: nvidia-nemotron-lightning
+    litellm_params:
+      model: nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b
+      api_key: os.environ/NVIDIA_API_KEY
+  - model_name: nvidia-mistral-large
+    litellm_params:
+      model: nvidia_nim/mistralai/mistral-large-4-1t-a52b
+      api_key: os.environ/NVIDIA_API_KEY
+  # Asymmetric: callers send input_type "query" or "passage".
+  - model_name: nvidia-nemotron-embed
+    litellm_params:
+      model: nvidia_nim/nvidia/nemotron-3.5-embed-1b
+      api_key: os.environ/NVIDIA_API_KEY
 
   # ---- Ollama ----
   - model_name: ollama-qwen2.5-7b
