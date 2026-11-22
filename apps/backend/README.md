@@ -15,6 +15,9 @@ libs/
   graph/       platform_graph: Neo4j schema, tenant-scoped graph store, entity/relation extraction
   history/     platform_history: token-budgeted context builder, compaction (summary + memory),
                semantic recall of older turns, context capsules
+  evals/       platform_evals: LLM-judge metrics (faithfulness, answer relevance, context
+               precision, citation accuracy), hit@k/MRR, loading and storing evaluations,
+               and the offline runner (`python -m platform_evals.cli`)
   rag/         platform_rag: Qdrant chunk store, BM25, hybrid retrieval, reranking (`[rerank]`),
                cited-answer prompt and citation validation; [ingest] extra adds
                parsing, chunking, BM25, metadata extraction and the ingestion pipeline
@@ -23,6 +26,7 @@ services/
   gateway/           gateway: AI Gateway (alias routing, fallbacks, circuit breaker, caching, quotas)
   ingestion_worker/  ingestion_worker: RabbitMQ consumers for the ingestion pipeline and
                      history compaction
+  eval_worker/       eval_worker: RabbitMQ consumer scoring sampled answers with the LLM judge
 ```
 
 ## Setup
@@ -52,9 +56,10 @@ With no provider keys at all, the gateway still works through Ollama alone.
 uv run uvicorn platform_api.main:app --reload --port 8000
 uv run uvicorn gateway.main:app --reload --port 8100 --env-file ../../docker/.env   # provider keys
 uv run python -m ingestion_worker
+uv run python -m eval_worker
 ```
 
-`make dev` runs all three, plus the frontend.
+`make dev` runs all four, plus the frontend.
 
 ### Platform API (`:8000`)
 
@@ -79,6 +84,11 @@ uv run python -m ingestion_worker
 | `POST /api/v1/conversations/{id}/capsules` | Snapshot a conversation as an immutable context capsule with a signed share token |
 | `GET /api/v1/capsules`, `GET /api/v1/capsules/{share_token}`, `DELETE /api/v1/capsules/{id}` | Your capsules; read-only view by share link (same workspace, unexpired) |
 | `POST /api/v1/capsules/{id}/fork` | New conversation seeded with the capsule, optionally on another `alias` |
+| `POST/DELETE /api/v1/messages/{id}/feedback` | Thumbs up/down (`rating` 1 or -1) and an optional comment on one of your answers |
+| `GET /api/v1/evals/summary?days=30` | Mean scores, daily trend, per-model comparison, abstention rate and feedback counts (admin) |
+| `GET /api/v1/evals/results?metric=&model=&source=&order=worst` | Evaluated answers, worst first (admin) |
+| `GET /api/v1/evals/results/{id}` | One evaluation with the question, answer, sources and the judge's per-claim verdicts (admin) |
+| `POST /api/v1/evals/messages/{id}` | Score an answer now with the judge (admin; the offline runner uses this) |
 
 The LLM endpoints work with the OpenAI SDKs:
 
@@ -187,6 +197,36 @@ Every chat request builds its prompt within a token budget: `min(alias context w
 - **Capsules** hold the summary, memory facts, key Q/A pairs and citation refs (typically 200–600 tokens). They can be shared by signed link, forked onto another model, or attached to one request with `context_capsule_id` for agent handoff.
 - **Metrics:** each answer's `usage.history` records `raw_history_tokens` (full replay) against `sent_history_tokens`; `/usage/summary` reports `history_tokens_saved_ratio`.
 
+### Evaluation
+
+```
+chat answer saved -> sampled (EVAL_SAMPLE_RATE, default 0.2) -> RabbitMQ eval.answers
+eval_worker: question + answer + the numbered sources (re-read from Qdrant by chunk id)
+             -> 4 judge calls (`judge` alias) -> eval_results (one row per answer)
+```
+
+| Metric | How it's scored |
+|---|---|
+| Faithfulness | The judge splits the answer into claims and checks each against the sources; share supported |
+| Answer relevance | 1–5 rating of how directly the answer addresses the question, scaled to 0–1; skipped for "I don't know" |
+| Context precision | The judge marks each source relevant or not; average precision over the ranking |
+| Citation accuracy | Each sentence carrying `[n]` is checked against the sources it cites; numbers outside the sources count as wrong |
+| hit@k, MRR (offline) | Rank of the first source from the expected document |
+
+- **A different judge.** The judge request carries `X-Gateway-Avoid-Providers` with the answering
+  model's provider, so the gateway tries other providers first and uses that one only as a last resort.
+- **Robust to bad JSON.** A judge reply that fails validation leaves that one metric empty, with the
+  error in `details`; if every metric fails the job is retried. Gateway outages retry via the queue.
+- **Feedback.** Thumbs up/down live in `message_feedback`, are returned with each message, and are
+  counted per answering model in the summary.
+- **Offline.** `make eval` (`python -m platform_evals.cli`) uploads `evals/corpus`, asks every question in
+  `evals/datasets/golden.jsonl` in a fresh conversation, has the API judge each answer
+  (`source=offline`, one `run_id` per run), adds hit@k, MRR, expected-term recall and abstention
+  accuracy, and writes `evals/reports/<run id>.json`. It exits 1 when a mean is below
+  `evals/thresholds.yaml`. `suite=history` replays `evals/datasets/history_*.jsonl` and checks that
+  facts from early turns are still recalled. `.github/workflows/evals.yml` runs it on PRs that touch
+  retrieval, history, evals or model routing (needs provider keys as repository secrets).
+
 ## Test & lint
 
 Each member runs its own tests:
@@ -200,13 +240,17 @@ Each member runs its own tests:
 (cd libs/rag && uv run pytest)            # parsing, chunking, BM25, pipeline, retrieval, citations, golden corpus
 (cd services/ingestion_worker && uv run pytest)  # end-to-end: API -> RabbitMQ -> worker -> Qdrant/Neo4j
 (cd libs/history && uv run pytest)        # context builder, compaction, capsules
+(cd libs/evals && uv run pytest)          # judge metrics and scoring
+(cd services/eval_worker && uv run pytest)  # scorer against real Postgres (skips if down)
 uv run ruff check . && uv run ruff format --check .
 ```
 
 Or `make test`, `make lint` and `make typecheck` from the repo root.
-API integration tests use `TEST_DATABASE_URL` (default `.../platform_test`, created automatically) and Redis DB 15; the ingestion end-to-end tests use `TEST_INGEST_DATABASE_URL` (`.../platform_test_ingest`), Redis DB 14 (flushed afterwards), and throwaway queues and collections.
+API integration tests use `TEST_DATABASE_URL` (default `.../platform_test`, created automatically) and Redis DB 15; the ingestion end-to-end tests use `TEST_INGEST_DATABASE_URL` (`.../platform_test_ingest`), Redis DB 14 (flushed afterwards), and throwaway queues and collections. The eval worker tests use
+`TEST_EVAL_DATABASE_URL` (`.../platform_test_eval`).
 
-Against a running stack with an LLM route, `make golden` asks the golden questions in
+Against a running stack with an LLM route, `make eval` scores the golden dataset (see
+[Evaluation](#evaluation)), `make golden` asks the golden questions in
 `evals/datasets/golden.jsonl`, and `make history-check` runs a 40-turn conversation that checks
 early facts survive compression and reports the tokens saved.
 

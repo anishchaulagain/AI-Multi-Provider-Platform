@@ -41,6 +41,8 @@ class FakeGateway:
     rag_bodies: list[dict[str, Any]] = field(default_factory=list)
     rewrites: int = 0
     summaries: int = 0
+    # LLM-judge calls: (metric, request headers).
+    judged: list[tuple[str, dict[str, str]]] = field(default_factory=list)
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -90,6 +92,17 @@ class FakeGateway:
                 json={
                     "choices": [{"message": {"role": "assistant", "content": json.dumps(reply)}}]
                 },
+            )
+        verdict = _judge_verdict(everything)
+        if not body.get("stream") and verdict is not None:
+            metric, reply = verdict
+            self.judged.append((metric, dict(request.headers)))
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [{"message": {"role": "assistant", "content": json.dumps(reply)}}]
+                },
+                headers={**META, "X-Gateway-Alias": "judge", "X-Gateway-Deployment": "fake-judge"},
             )
         if body.get("stream") and last.startswith("Sources:"):
             self.rag_prompts.append(last)
@@ -159,3 +172,22 @@ class FakeGateway:
     @property
     def last(self) -> httpx.Request:
         return self.requests[-1]
+
+
+def _judge_verdict(prompt: str) -> tuple[str, dict[str, Any]] | None:
+    """Fixed verdicts for the default answer "Qdrant is written in Rust [1]. Invented [9]."."""
+    if "grounded in its SOURCES" in prompt:
+        claims = [
+            {"claim": "Qdrant is written in Rust", "supported": True},
+            {"claim": "Invented", "supported": False},
+        ]
+        return "faithfulness", {"claims": claims}
+    if "Rate how well the ANSWER" in prompt:
+        return "answer_relevance", {"score": 5, "reason": "direct"}
+    if "For each numbered SOURCE" in prompt:
+        numbers = sorted({int(n) for n in re.findall(r"\[(\d+)\] ", prompt)})
+        return "context_precision", {"sources": [{"n": n, "relevant": n == 1} for n in numbers]}
+    if "Each STATEMENT from an answer" in prompt:
+        ids = sorted({int(i) for i in re.findall(r"(\d+)\. \(cites", prompt)})
+        return "citation_accuracy", {"statements": [{"id": i, "supported": True} for i in ids]}
+    return None

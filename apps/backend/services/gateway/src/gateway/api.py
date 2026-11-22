@@ -42,6 +42,7 @@ def get_caller(
     request: Request,
     x_tenant_id: Annotated[str | None, Header()] = None,
     x_user_id: Annotated[str | None, Header()] = None,
+    x_gateway_avoid_providers: Annotated[str | None, Header()] = None,
 ) -> Caller:
     try:
         tenant_id = str(uuid.UUID(x_tenant_id or ""))
@@ -52,6 +53,9 @@ def get_caller(
         tenant_id=tenant_id,
         user_id=user_id,
         request_id=getattr(request.state, "request_id", None),
+        avoid_providers=tuple(
+            p.strip() for p in (x_gateway_avoid_providers or "").split(",") if p.strip()
+        ),
     )
 
 

@@ -10,6 +10,9 @@ USER_ID = "X-User-ID"
 REQUEST_ID = "X-Request-ID"
 # Request: set to "no-cache" to bypass the response cache.
 CACHE_CONTROL = "Cache-Control"
+# Request: comma-separated providers to try last (e.g. a judge avoiding the
+# answering model's family). They stay in the chain as a last resort.
+AVOID_PROVIDERS = "X-Gateway-Avoid-Providers"
 
 # Response: how the request was served.
 ALIAS = "X-Gateway-Alias"

@@ -7,6 +7,7 @@ from platform_api.api.routes import (
     capsules,
     conversations,
     documents,
+    evals,
     graph,
     llm,
     usage,
@@ -24,6 +25,7 @@ protected.include_router(documents.router)
 protected.include_router(conversations.router)
 protected.include_router(capsules.router)
 protected.include_router(graph.router)
+protected.include_router(evals.router)
 protected.include_router(llm.router)
 protected.include_router(usage.router)
 api_router.include_router(protected)

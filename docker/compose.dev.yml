@@ -36,6 +36,16 @@ services:
       - ../apps/backend/services:/app/services
       - ../apps/backend/libs:/app/libs
 
+  eval_worker:
+    build:
+      target: dev
+    image: ai-platform-eval-worker-dev
+    command: ["watchfiles", "--filter", "python", "python -m eval_worker", "/app/services", "/app/libs"]
+    environment: *python-dev
+    volumes:
+      - ../apps/backend/services:/app/services
+      - ../apps/backend/libs:/app/libs
+
   migrate:
     build:
       target: dev

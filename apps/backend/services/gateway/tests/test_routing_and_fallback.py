@@ -55,6 +55,19 @@ async def test_falls_back_on_provider_failure(gw: Harness, failure: str | int) -
     assert response.headers["x-gateway-fallbacks"] == "1"
 
 
+async def test_avoided_provider_is_tried_last(gw: Harness) -> None:
+    # A judge avoiding the answering model's provider; it stays as a last resort.
+    avoided = await gw.chat(headers={"X-Gateway-Avoid-Providers": "prov-a"})
+    assert avoided.headers["x-gateway-deployment"] == "b-small"
+
+    gw.upstream.set("b-small", 503)
+    gw.upstream.set("c-small", 503)
+    last_resort = await gw.chat(
+        headers={"X-Gateway-Avoid-Providers": "prov-a, prov-x", "Cache-Control": "no-cache"}
+    )
+    assert last_resort.headers["x-gateway-deployment"] == "a-small"
+
+
 async def test_bad_request_is_not_retried(gw: Harness) -> None:
     gw.upstream.set("a-small", 400)
     response = await gw.chat()

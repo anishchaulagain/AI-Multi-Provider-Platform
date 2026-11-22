@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   LogOut,
   MessagesSquare,
+  type LucideIcon,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -19,12 +20,12 @@ import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
-const NAV = [
+const NAV: { href: string; label: string; icon: LucideIcon; soon?: boolean }[] = [
   { href: "/app", label: "Overview", icon: LayoutDashboard },
   { href: "/app/playground", label: "Playground", icon: FlaskConical },
   { href: "/app/documents", label: "Documents", icon: FileText },
   { href: "/app/chat", label: "Chat", icon: MessagesSquare },
-  { href: "/app/evals", label: "Evals", icon: BarChart3, soon: true },
+  { href: "/app/evals", label: "Evals", icon: BarChart3 },
   { href: "/app/api-keys", label: "API keys", icon: KeyRound },
 ];
 

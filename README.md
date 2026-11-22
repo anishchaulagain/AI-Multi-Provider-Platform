@@ -54,6 +54,7 @@ LiteLLM               ▼
  ├ NVIDIA              └──────────────► Neo4j   (documents · chunks · entities · relations)
  └ Ollama
                  History compaction (same worker, own queue) → summary + memory facts
+                 Eval worker ── sampled answers → LLM judge (another provider) → scores
 ```
 
 **Stores:**
@@ -95,13 +96,14 @@ apps/
       api/               Platform API
       gateway/           AI Gateway (wraps LiteLLM)
       ingestion_worker/  Document pipeline + history compaction
-    libs/                core · db · llm_client · messaging · graph · rag · history
+      eval_worker/       LLM-judge scoring of sampled answers
+    libs/                core · db · llm_client · messaging · graph · rag · history · evals
 infra/
   litellm/config.yaml    one LiteLLM model per provider deployment
   gateway/routes.yaml    deployments, RPM budgets and alias fallback chains
   rabbitmq/ neo4j/       broker definitions, graph schema
 docker/                  compose files, Dockerfiles, .env.example (see docker/README.md)
-evals/                   golden corpus (corpus/) and questions (datasets/golden.jsonl)
+evals/                   golden corpus, datasets (golden + history probes), thresholds.yaml
 scripts/                 golden_smoke.py, history_smoke.py, pull-ollama-models.sh
 ```
 
@@ -126,7 +128,7 @@ make install    # uv sync, npm ci, pre-commit hooks
 make up         # start Postgres, Redis, RabbitMQ, Qdrant, Neo4j, LiteLLM
 make migrate    # apply database migrations
 make seed       # default tenant + admin@example.com / admin12345
-make dev        # API :8000, gateway :8100, ingestion worker, frontend :3000 (hot reload)
+make dev        # API :8000, gateway :8100, ingestion + eval workers, frontend :3000 (hot reload)
 ```
 Then open http://localhost:3000 and sign in.
 
@@ -150,11 +152,12 @@ After switching models, upload your documents again. A document embedded with a 
 |---|---|
 | `make up` / `make down` | Start or stop the infrastructure containers |
 | `make up-all` / `make docker-dev` | Full stack in Docker / with hot reload |
-| `make dev` | API, gateway, worker and frontend locally with hot reload |
+| `make dev` | API, gateway, workers and frontend locally with hot reload |
 | `make models` | Start Ollama and pull the local models |
 | `make migrate` / `make migration m="..."` | Apply migrations / create a new one |
 | `make test` / `make test-unit` | All tests / only those that need no running services |
 | `make lint` / `make typecheck` / `make check` | ruff + eslint / mypy + tsc / everything CI runs |
+| `make eval` | Score the golden dataset with the LLM judge; fails below `evals/thresholds.yaml` |
 | `make golden` | Ask the golden questions against the running stack |
 | `make history-check` | 40-turn conversation test of history compression |
 | `make help` | List all targets |

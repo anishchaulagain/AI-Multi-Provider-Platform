@@ -41,6 +41,8 @@ class Caller:
     tenant_id: str
     user_id: str | None = None
     request_id: str | None = None
+    # Tried only after every other provider in the chain.
+    avoid_providers: tuple[str, ...] = ()
 
 
 @dataclass
@@ -293,7 +295,7 @@ class GatewayService:
             await self._record(ctx, dep=None, status="cache_hit")
             return ChatResult(hit, ctx.meta(None))
 
-        for dep in self.routes.chain(ctx.alias):
+        for dep in self.routes.chain(ctx.alias, ctx.caller.avoid_providers):
             if not await self._admit(dep, ctx):
                 continue
             try:
@@ -340,7 +342,7 @@ class GatewayService:
             await self._record(ctx, dep=None, status="cache_hit")
             return StreamResult(ctx.meta(None), self._replay(hit))
 
-        for dep in self.routes.chain(ctx.alias):
+        for dep in self.routes.chain(ctx.alias, ctx.caller.avoid_providers):
             if not await self._admit(dep, ctx):
                 continue
             try:

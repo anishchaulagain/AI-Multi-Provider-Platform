@@ -7,3 +7,19 @@
 {"id": "helm-language", "question": "Which programming language is Helm written in?", "expected_doc": "northwind-products.md", "expected_terms": ["Rust"]}
 {"id": "atlas-os", "question": "Which operating system does the Atlas robot run, and what language is it written in?", "expected_doc": "northwind-products.md", "expected_terms": ["Helm", "Rust"]}
 {"id": "unknown", "question": "What is Northwind's annual revenue?", "expected_doc": null, "expected_terms": ["don't know"]}
+{"id": "vacation-approval", "question": "How far in advance must vacation requests be approved?", "expected_doc": "northwind-handbook.md", "expected_terms": ["two weeks"]}
+{"id": "parental-blocks", "question": "In how many blocks can parental leave be taken?", "expected_doc": "northwind-handbook.md", "expected_terms": ["three"]}
+{"id": "office-hours", "question": "When is the Lisbon office open?", "expected_doc": "northwind-handbook.md", "expected_terms": ["8:00", "20:00"]}
+{"id": "fully-remote", "question": "Who can apply to work fully remotely?", "expected_doc": "northwind-handbook.md", "expected_terms": ["100 km"]}
+{"id": "engineer-laptops", "question": "Which laptops can engineers choose from?", "expected_doc": "northwind-handbook.md", "expected_terms": ["MacBook Pro", "ThinkPad"]}
+{"id": "lost-equipment", "question": "How quickly must lost equipment be reported?", "expected_doc": "northwind-handbook.md", "expected_terms": ["48 hours"]}
+{"id": "headquarters", "question": "Where is Northwind Robotics headquartered?", "expected_doc": "northwind-handbook.md", "expected_terms": ["Lisbon"]}
+{"id": "atlas-rate", "question": "How many items per hour does Atlas pick?", "expected_doc": "northwind-products.md", "expected_terms": ["600"]}
+{"id": "atlas-camera", "question": "Which camera module does Atlas use?", "expected_doc": "northwind-products.md", "expected_terms": ["Vision-3"]}
+{"id": "courier-speed", "question": "What is Courier's top speed?", "expected_doc": "northwind-products.md", "expected_terms": ["2"]}
+{"id": "courier-positioning", "question": "Which positioning system does Courier rely on?", "expected_doc": "northwind-products.md", "expected_terms": ["Beacon"]}
+{"id": "helm-created", "question": "When was Helm created, and by whom?", "expected_doc": "northwind-products.md", "expected_terms": ["2021", "platform team"]}
+{"id": "support-response", "question": "What is the support response time for critical incidents?", "expected_doc": "northwind-products.md", "expected_terms": ["4"]}
+{"id": "firmware-cadence", "question": "How often are Atlas and Courier firmware updates released?", "expected_doc": "northwind-products.md", "expected_terms": ["six weeks"]}
+{"id": "unknown-ceo", "question": "Who is the CEO of Northwind Robotics?", "expected_doc": null, "expected_terms": []}
+{"id": "unknown-price", "question": "How much does an Atlas robot cost?", "expected_doc": null, "expected_terms": []}

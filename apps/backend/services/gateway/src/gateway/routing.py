@@ -6,6 +6,7 @@ callers ask for; the gateway walks its deployments in order until one succeeds.
 """
 
 import os
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Literal
 
@@ -60,8 +61,15 @@ class RouteTable(BaseModel):
         windows = [d.context_window for d in self.chain(alias) if d.context_window and d.configured]
         return min(windows) if windows else None
 
-    def chain(self, alias: str) -> list[Deployment]:
-        return [self.deployments[n] for n in self.aliases[alias].deployments]
+    def chain(self, alias: str, avoid_providers: Iterable[str] = ()) -> list[Deployment]:
+        """The alias's deployments in order; those of `avoid_providers` move to the end."""
+        deps = [self.deployments[n] for n in self.aliases[alias].deployments]
+        avoid = set(avoid_providers)
+        if not avoid:
+            return deps
+        return [d for d in deps if d.provider not in avoid] + [
+            d for d in deps if d.provider in avoid
+        ]
 
     @property
     def providers(self) -> dict[str, list[Deployment]]:

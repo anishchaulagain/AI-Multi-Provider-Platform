@@ -1,0 +1,36 @@
+[project]
+name = "eval-worker"
+version = "0.1.0"
+description = "RabbitMQ consumer: score sampled answers with the LLM judge"
+requires-python = ">=3.12"
+dependencies = [
+    "platform-core",
+    "platform-db",
+    "platform-messaging",
+    "platform-rag",
+    "platform-evals",
+    "llm-client",
+    "watchfiles>=0.24",
+]
+
+[project.scripts]
+eval-worker = "eval_worker.main:main"
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+platform-core = { workspace = true }
+platform-db = { workspace = true }
+platform-messaging = { workspace = true }
+platform-rag = { workspace = true }
+platform-evals = { workspace = true }
+llm-client = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+markers = ["integration: requires running infrastructure"]

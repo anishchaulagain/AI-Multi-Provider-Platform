@@ -16,6 +16,7 @@ from platform_api.core.windows import ModelWindows
 from platform_core.rate_limit import RateLimiter
 from platform_core.storage import BlobStore, build_blob_store
 from platform_db.session import create_engine, create_sessionmaker
+from platform_evals import AnswerEvaluator
 from platform_graph import GraphStore
 from platform_history import ContextBuilder, TokenCounter, TurnStore
 from platform_messaging import Publisher
@@ -56,6 +57,7 @@ class Resources:
     windows: ModelWindows
     graph: GraphStore | None
     retriever: Retriever
+    evaluator: AnswerEvaluator
 
 
 @asynccontextmanager
@@ -84,7 +86,8 @@ async def lifespan_resources(
     )
     qdrant = overrides.qdrant or AsyncQdrantClient(url=settings.qdrant_url, timeout=10)
     publisher = Publisher(
-        settings.rabbitmq_url, (settings.ingest_queue(), settings.history_queue())
+        settings.rabbitmq_url,
+        (settings.ingest_queue(), settings.history_queue(), settings.eval_queue()),
     )
     counter = TokenCounter()
     chunks = ChunkStore(qdrant, settings.embed_model_name)
@@ -145,6 +148,7 @@ async def lifespan_resources(
                 max_recent_messages=settings.history_max_recent_messages,
             ),
             windows=ModelWindows(gateway),
+            evaluator=AnswerEvaluator(gateway, alias=settings.judge_alias),
         )
     finally:
         if warm_task is not None:

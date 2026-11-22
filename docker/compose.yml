@@ -55,14 +55,16 @@ services:
       S3_BUCKET: ${S3_BUCKET:-documents}
       EMBED_ALIAS: ${EMBED_ALIAS:-embed}
       EMBED_MODEL_NAME: ${EMBED_MODEL_NAME:-nomic-embed-text}
-      EMBED_DOCUMENT_PREFIX: ${EMBED_DOCUMENT_PREFIX-search_document: }
-      EMBED_QUERY_PREFIX: ${EMBED_QUERY_PREFIX-search_query: }
+      EMBED_DOCUMENT_PREFIX: "${EMBED_DOCUMENT_PREFIX-search_document: }"
+      EMBED_QUERY_PREFIX: "${EMBED_QUERY_PREFIX-search_query: }"
       EMBED_DOCUMENT_INPUT_TYPE: ${EMBED_DOCUMENT_INPUT_TYPE:-}
       EMBED_QUERY_INPUT_TYPE: ${EMBED_QUERY_INPUT_TYPE:-}
       GATEWAY_URL: http://gateway:8100
       GATEWAY_SERVICE_TOKEN: ${GATEWAY_SERVICE_TOKEN}
       JWT_SECRET: ${JWT_SECRET}
       RERANKER: ${RERANKER:-fastembed}
+      # Share of answers the eval worker scores with the LLM judge (0 disables).
+      EVAL_SAMPLE_RATE: ${EVAL_SAMPLE_RATE:-0.2}
     volumes:
       # Reranker model cache (downloaded on first use).
       - model_cache:/app/.cache
@@ -97,8 +99,8 @@ services:
       S3_BUCKET: ${S3_BUCKET:-documents}
       EMBED_ALIAS: ${EMBED_ALIAS:-embed}
       EMBED_MODEL_NAME: ${EMBED_MODEL_NAME:-nomic-embed-text}
-      EMBED_DOCUMENT_PREFIX: ${EMBED_DOCUMENT_PREFIX-search_document: }
-      EMBED_QUERY_PREFIX: ${EMBED_QUERY_PREFIX-search_query: }
+      EMBED_DOCUMENT_PREFIX: "${EMBED_DOCUMENT_PREFIX-search_document: }"
+      EMBED_QUERY_PREFIX: "${EMBED_QUERY_PREFIX-search_query: }"
       EMBED_DOCUMENT_INPUT_TYPE: ${EMBED_DOCUMENT_INPUT_TYPE:-}
       EMBED_QUERY_INPUT_TYPE: ${EMBED_QUERY_INPUT_TYPE:-}
       GATEWAY_URL: http://gateway:8100
@@ -116,6 +118,31 @@ services:
       neo4j: { condition: service_started }
     deploy:
       replicas: ${INGEST_WORKERS:-1}
+
+  eval_worker:
+    <<: *restart
+    build:
+      <<: *python-build
+      args: { PACKAGE: eval-worker, APP_MODULE: "" }
+    image: ai-platform-eval-worker
+    command: ["python", "-m", "eval_worker"]
+    healthcheck:
+      disable: true
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-local}
+      LOG_JSON: "true"
+      DATABASE_URL: *db-url
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
+      QDRANT_URL: http://qdrant:6333
+      GATEWAY_URL: http://gateway:8100
+      GATEWAY_SERVICE_TOKEN: ${GATEWAY_SERVICE_TOKEN}
+      EMBED_MODEL_NAME: ${EMBED_MODEL_NAME:-nomic-embed-text}
+      JUDGE_ALIAS: ${JUDGE_ALIAS:-judge}
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      rabbitmq: { condition: service_healthy }
+      qdrant: { condition: service_healthy }
+      gateway: { condition: service_started }
 
   gateway:
     <<: *restart

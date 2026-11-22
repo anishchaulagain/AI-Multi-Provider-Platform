@@ -28,6 +28,9 @@ def make_settings(**overrides: object) -> Settings:
         "graph_enabled": False,
         # Compaction jobs go to a test-only queue, never to a real worker's queue.
         "history_exchange": "test-history",
+        # Online evals are opted into per test, on a test-only queue.
+        "eval_exchange": "test-eval",
+        "eval_sample_rate": 0.0,
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)  # type: ignore[arg-type]

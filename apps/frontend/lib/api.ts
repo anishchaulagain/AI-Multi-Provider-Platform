@@ -497,7 +497,73 @@ export type Message = {
   token_count: number;
   citations: Citation[];
   usage: ChatUsage | null;
+  // The current user's thumbs up (1) / down (-1) on an answer.
+  feedback?: number | null;
   created_at: string;
+};
+
+// ---------- Evaluation ----------
+export const EVAL_METRICS = [
+  "faithfulness",
+  "answer_relevance",
+  "context_precision",
+  "citation_accuracy",
+] as const;
+export type EvalMetric = (typeof EVAL_METRICS)[number];
+export type EvalScores = Record<EvalMetric, number | null>;
+
+export type EvalSummary = {
+  days: number;
+  count: number;
+  metrics: Record<EvalMetric, { mean: number | null; count: number }>;
+  abstention_rate: number | null;
+  trend: ({ day: string; count: number } & EvalScores)[];
+  by_model: ({
+    deployment: string | null;
+    provider: string | null;
+    count: number;
+    feedback_up: number;
+    feedback_down: number;
+  } & EvalScores)[];
+  feedback: { up: number; down: number };
+};
+
+export type EvalResultItem = EvalScores & {
+  id: string;
+  message_id: string;
+  conversation_id: string;
+  source: "online" | "offline" | "manual";
+  run_id: string | null;
+  question: string | null;
+  answer: string;
+  answer_alias: string | null;
+  answer_deployment: string | null;
+  judge_deployment: string | null;
+  feedback: number | null;
+  error: string | null;
+  created_at: string;
+};
+
+export type EvalResultDetail = EvalResultItem & {
+  sources: {
+    n: number;
+    chunk_id: string;
+    doc_id: string;
+    doc_title: string;
+    text: string;
+    missing: boolean;
+  }[];
+  details: {
+    abstained?: boolean;
+    faithfulness?: { claims?: { claim: string; supported: boolean }[]; error?: string };
+    answer_relevance?: { score?: number; reason?: string; error?: string };
+    context_precision?: { relevant?: number[]; error?: string };
+    citation_accuracy?: {
+      statements?: { text: string; sources: number[]; supported: boolean }[];
+      error?: string;
+    };
+  };
+  comments: { rating: number; comment: string | null; updated_at: string }[];
 };
 
 export type ChatHandlers = {
@@ -680,6 +746,52 @@ export const api = {
       method: "POST",
       token,
       json: { alias: alias ?? null },
+    }),
+
+  setFeedback: (token: string, messageId: string, rating: 1 | -1, comment?: string) =>
+    request<{ rating: number; comment: string | null }>(
+      `${API_V1}/messages/${messageId}/feedback`,
+      { method: "POST", token, json: { rating, comment: comment || null } },
+    ),
+
+  clearFeedback: (token: string, messageId: string) =>
+    request<void>(`${API_V1}/messages/${messageId}/feedback`, {
+      method: "DELETE",
+      token,
+    }),
+
+  evalSummary: (token: string, days = 30) =>
+    request<EvalSummary>(`${API_V1}/evals/summary?days=${days}`, { token }),
+
+  evalResults: (
+    token: string,
+    params: {
+      metric?: EvalMetric | null;
+      model?: string | null;
+      order?: "worst" | "recent";
+      limit?: number;
+    } = {},
+  ) => {
+    const query = new URLSearchParams({
+      order: params.order ?? "worst",
+      limit: String(params.limit ?? 20),
+    });
+    if (params.metric) query.set("metric", params.metric);
+    if (params.model) query.set("model", params.model);
+    return request<{ items: EvalResultItem[]; total: number }>(
+      `${API_V1}/evals/results?${query}`,
+      { token },
+    );
+  },
+
+  evalResult: (token: string, id: string) =>
+    request<EvalResultDetail>(`${API_V1}/evals/results/${id}`, { token }),
+
+  evaluateMessage: (token: string, messageId: string) =>
+    request<EvalResultDetail>(`${API_V1}/evals/messages/${messageId}`, {
+      method: "POST",
+      token,
+      json: { source: "manual" },
     }),
 
   getConversation: (token: string, id: string) =>

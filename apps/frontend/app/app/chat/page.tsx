@@ -9,6 +9,8 @@ import {
   Send,
   Share2,
   Square,
+  ThumbsDown,
+  ThumbsUp,
   Trash2,
 } from "lucide-react";
 
@@ -113,6 +115,39 @@ function UsageLine({ usage }: { usage: ChatUsage }) {
           {Math.round(usage.history.history_tokens_saved_ratio * 100)}% saved
         </Badge>
       )}
+    </div>
+  );
+}
+
+/** Thumbs up / down on an answer; clicking the active one clears it. */
+function FeedbackButtons({
+  rating,
+  onRate,
+}: {
+  rating: number | null | undefined;
+  onRate: (rating: 1 | -1 | null) => void;
+}) {
+  return (
+    <div className="flex gap-1">
+      {([1, -1] as const).map((value) => {
+        const Icon = value === 1 ? ThumbsUp : ThumbsDown;
+        const active = rating === value;
+        return (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={active}
+            title={value === 1 ? "Good answer" : "Bad answer"}
+            onClick={() => onRate(active ? null : value)}
+            className={cn(
+              "rounded p-1 text-muted-foreground hover:bg-background hover:text-foreground",
+              active && "bg-background text-foreground",
+            )}
+          >
+            <Icon className={cn("size-3.5", active && "fill-current")} />
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -229,6 +264,23 @@ export default function ChatPage() {
       }
     } catch (err) {
       fail(err, "Failed to delete");
+    }
+  }
+
+  async function rate(message: UiMessage, rating: 1 | -1 | null) {
+    if (!token) return;
+    let comment: string | undefined;
+    if (rating === -1) {
+      comment = window.prompt("What was wrong with this answer? (optional)") ?? undefined;
+    }
+    try {
+      if (rating === null) await api.clearFeedback(token, message.id);
+      else await api.setFeedback(token, message.id, rating, comment);
+      setMessages((all) =>
+        all.map((m) => (m.id === message.id ? { ...m, feedback: rating } : m)),
+      );
+    } catch (err) {
+      fail(err, "Could not save feedback");
     }
   }
 
@@ -472,7 +524,17 @@ export default function ChatPage() {
                       ))}
                     </div>
                   )}
-                  {m.usage && !m.streaming && <UsageLine usage={m.usage} />}
+                  {!m.streaming && (m.usage || !m.id.startsWith("local-")) && (
+                    <div className="flex items-end justify-between gap-2">
+                      {m.usage ? <UsageLine usage={m.usage} /> : <span />}
+                      {!m.id.startsWith("local-") && (
+                        <FeedbackButtons
+                          rating={m.feedback}
+                          onRate={(r) => rate(m, r)}
+                        />
+                      )}
+                    </div>
+                  )}
                 </>
               )}
             </div>

@@ -13,6 +13,7 @@ dependencies = [
     "platform-rag[rerank]",
     "platform-graph",
     "platform-history",
+    "platform-evals",
     "python-multipart>=0.0.9",
     "pyjwt>=2.15.1",
     "pwdlib[argon2]>=0.3.1",
@@ -31,6 +32,7 @@ platform-messaging = { workspace = true }
 platform-rag = { workspace = true }
 platform-graph = { workspace = true }
 platform-history = { workspace = true }
+platform-evals = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

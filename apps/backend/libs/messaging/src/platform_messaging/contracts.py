@@ -20,3 +20,11 @@ class CompactConversationJob(BaseModel):
     version: Literal[1] = 1
     conversation_id: uuid.UUID
     tenant_id: uuid.UUID
+
+
+class EvaluateAnswerJob(BaseModel):
+    """Score a persisted assistant message with the LLM judge."""
+
+    version: Literal[1] = 1
+    message_id: uuid.UUID
+    tenant_id: uuid.UUID
