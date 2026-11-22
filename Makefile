@@ -7,11 +7,11 @@ INFRA        := postgres redis rabbitmq qdrant neo4j litellm
 BACKEND      := cd apps/backend &&
 FRONTEND     := cd apps/frontend &&
 # uv workspace members, each tested/type-checked in its own run.
-PY_MEMBERS   := libs/llm_client libs/messaging libs/graph libs/history libs/rag services/gateway services/api services/ingestion_worker
+PY_MEMBERS   := libs/llm_client libs/messaging libs/graph libs/history libs/rag libs/evals services/gateway services/api services/ingestion_worker services/eval_worker
 
 .DEFAULT_GOAL := help
 .PHONY: help env install up up-all down down-v logs ps models dev dev-backend dev-gateway \
-        dev-worker dev-frontend docker-dev migrate migration seed golden history-check test test-unit lint format typecheck check
+        dev-worker dev-eval-worker dev-frontend docker-dev migrate migration seed golden history-check eval test test-unit lint format typecheck check
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -53,8 +53,8 @@ ps: ## Show container status
 	$(COMPOSE) ps
 
 # ---------- Local dev ----------
-dev: ## Run API, gateway, ingestion worker and frontend locally with hot reload
-	@$(MAKE) -j4 dev-backend dev-gateway dev-worker dev-frontend
+dev: ## Run API, gateway, workers and frontend locally with hot reload
+	@$(MAKE) -j5 dev-backend dev-gateway dev-worker dev-eval-worker dev-frontend
 
 dev-backend:
 	$(BACKEND) uv run uvicorn platform_api.main:app --reload --port 8000
@@ -65,6 +65,9 @@ dev-gateway:
 
 dev-worker:
 	$(BACKEND) uv run watchfiles --filter python "python -m ingestion_worker" services libs
+
+dev-eval-worker:
+	$(BACKEND) uv run watchfiles --filter python "python -m eval_worker" services libs
 
 dev-frontend:
 	$(FRONTEND) npm run dev
@@ -105,5 +108,8 @@ golden: ## Ask the golden questions against the running stack (needs an LLM rout
 
 history-check: ## 40-turn history test against the running stack (needs an LLM route)
 	$(BACKEND) uv run python ../../scripts/history_smoke.py
+
+eval: ## Score the golden dataset with the LLM judge; fails below evals/thresholds.yaml (suite=answers|history|all)
+	$(BACKEND) uv run python -m platform_evals.cli --suite $(or $(suite),answers)
 
 check: lint typecheck test ## Everything CI runs

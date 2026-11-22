@@ -77,6 +77,8 @@ class Caller:
     tenant_id: uuid.UUID | str
     user_id: uuid.UUID | str | None = None
     request_id: str | None = None
+    # Providers the gateway should try only after all others (see h.AVOID_PROVIDERS).
+    avoid_providers: tuple[str, ...] = ()
 
     def headers(self) -> dict[str, str]:
         out = {h.TENANT_ID: str(self.tenant_id)}
@@ -84,6 +86,8 @@ class Caller:
             out[h.USER_ID] = str(self.user_id)
         if self.request_id:
             out[h.REQUEST_ID] = self.request_id
+        if self.avoid_providers:
+            out[h.AVOID_PROVIDERS] = ",".join(self.avoid_providers)
         return out
 
 

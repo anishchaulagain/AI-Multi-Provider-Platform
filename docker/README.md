@@ -7,7 +7,7 @@
 | `compose.dev.yml` | Dev overrides: hot reload with bind-mounted source. |
 | `python.Dockerfile` | One image recipe for every Python service in the uv workspace (`--build-arg PACKAGE=... APP_MODULE=...`; multi-stage `dev` / `runtime`). |
 | `frontend.Dockerfile` | Next.js image (standalone output, multi-stage: `dev` / `runtime`). |
-| `.env.example` | Credentials, optional free-tier LLM keys, host ports. |
+| `.env.example` | Credentials, optional free-tier LLM keys (Groq, Gemini, OpenRouter, NVIDIA), upload store, embedding model, host ports. |
 
 ## Usage
 
@@ -28,7 +28,10 @@ docker compose -f docker/compose.yml exec ollama ollama pull qwen2.5:7b
 docker compose -f docker/compose.yml exec ollama ollama pull nomic-embed-text
 
 # Only infrastructure (run the apps locally instead)
-docker compose -f docker/compose.yml -f docker/compose.ports.yml up -d postgres redis rabbitmq qdrant neo4j minio litellm
+docker compose -f docker/compose.yml -f docker/compose.ports.yml up -d postgres redis rabbitmq qdrant neo4j litellm
+
+# Optional: MinIO, to keep uploaded originals (set BLOB_STORE=minio)
+docker compose -f docker/compose.yml -f docker/compose.ports.yml --profile s3 up -d
 
 # Stop / stop and wipe volumes
 docker compose -f docker/compose.yml down
@@ -51,12 +54,14 @@ Leaving out `compose.ports.yml` keeps every service on the internal Docker netwo
 | RabbitMQ | 5672 / 15672 | http://localhost:15672 |
 | Qdrant | 6333 / 6334 | http://localhost:6333/dashboard |
 | Neo4j | 7474 / 7687 | http://localhost:7474 |
-| MinIO | 9000 / 9001 | http://localhost:9001 |
+| MinIO (`s3` profile only) | 9000 / 9001 | http://localhost:9001 |
 
 ## Notes
 
+- **Uploads** are held in Redis only until they are chunked and embedded (`BLOB_STORE=redis`, the default), so MinIO isn't started unless you pass `--profile s3` and set `BLOB_STORE=minio`.
 - **MinIO** runs from `pgsty/minio`, a maintained fork of the community edition (upstream stopped publishing free images in 2025). The binary, CLI and env vars are the same, and any S3-compatible store works. The one-shot `minio-init` job creates the `documents` bucket.
 - **Neo4j** schema (constraints, indexes, the `entity_names` full-text index) is applied by the API and worker on startup; `infra/neo4j/init.cypher` is a generated copy. Browse the graph at http://localhost:7474.
+- **Eval worker** scores `EVAL_SAMPLE_RATE` (default 0.2) of live answers with the `judge` alias; set it to `0` to turn online evals off.
 - **Reranker** model downloads on first use into the `model_cache` volume; set `RERANKER=none` to skip it.
 - **Ingestion workers** scale with `INGEST_WORKERS` in `docker/.env`. Each consumes one job at a time (`prefetch=1`).
 - **RabbitMQ topology** (exchanges, quorum work queue, TTL retry queues, DLQ) is declared by the API and worker on startup. `infra/rabbitmq/definitions.json` is a generated copy for reference or `rabbitmqadmin import`; a test keeps the two in sync.

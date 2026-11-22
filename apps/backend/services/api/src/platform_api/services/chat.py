@@ -27,9 +27,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from llm_client import Caller, ChatCompletionRequest, GatewayError, GatewayStream
 from platform_api.core.resources import Resources
 from platform_api.schemas.conversation import CitationRead, MessageRead
+from platform_api.services import evals as evals_service
 from platform_api.services import history as history_service
 from platform_core.errors import AppError, NotFoundError
-from platform_db.models import Conversation, Message, MessageRole
+from platform_db.models import Conversation, Message, MessageFeedback, MessageRole
 from platform_rag.answer import SYSTEM_PROMPT, build_messages, resolve_citations
 from platform_rag.retrieve import RetrievalResult, Turn, estimate_tokens
 
@@ -74,6 +75,13 @@ async def list_messages(
     # Resolve stored chunk references to their current text in one lookup.
     chunk_ids = list({c["chunk_id"] for m in messages for c in m.citations})
     chunks = {c.id: c for c in await resources.chunks.get_chunks(conversation.tenant_id, chunk_ids)}
+    feedback = await session.execute(
+        select(MessageFeedback.message_id, MessageFeedback.rating).where(
+            MessageFeedback.message_id.in_([m.id for m in messages]),
+            MessageFeedback.user_id == conversation.user_id,
+        )
+    )
+    ratings = {message_id: rating for message_id, rating in feedback}
     out = []
     for message in messages:
         citations = []
@@ -101,6 +109,7 @@ async def list_messages(
                 token_count=message.token_count,
                 citations=citations,
                 usage=message.usage,
+                feedback=ratings.get(message.id),
                 created_at=message.created_at,
             )
         )
@@ -256,12 +265,17 @@ async def stream_answer(resources: Resources, prepared: PreparedChat) -> AsyncIt
                 resources, prepared, answer, [c.stored() for c in citations], invalid, usage
             )
         )
-        # Off the answer path: fold old turns into the summary when history grows.
+        # Off the answer path: fold old turns into the summary when history grows,
+        # and queue a sample of answers for the LLM judge.
         await asyncio.shield(
             history_service.schedule_compaction(
                 resources, prepared.conversation_id, prepared.tenant_id
             )
         )
+        if answer.error is None:
+            await asyncio.shield(
+                evals_service.maybe_schedule_evaluation(resources, message_id, prepared.tenant_id)
+            )
         yield _sse(
             "done",
             {"message_id": str(message_id), "user_message_id": str(prepared.user_message_id)},

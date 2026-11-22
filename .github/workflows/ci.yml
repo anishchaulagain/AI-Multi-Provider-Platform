@@ -77,7 +77,7 @@ jobs:
       - name: Mypy
         run: |
           uv run mypy libs/core/src libs/db/src
-          for m in libs/llm_client libs/messaging libs/graph libs/history libs/rag services/gateway services/api services/ingestion_worker; do
+          for m in libs/llm_client libs/messaging libs/graph libs/history libs/rag libs/evals services/gateway services/api services/ingestion_worker services/eval_worker; do
             (cd $m && uv run mypy --config-file ../../pyproject.toml src tests)
           done
 
@@ -90,7 +90,7 @@ jobs:
 
       - name: Tests
         run: |
-          for m in libs/llm_client libs/messaging libs/graph libs/history libs/rag services/gateway services/api services/ingestion_worker; do
+          for m in libs/llm_client libs/messaging libs/graph libs/history libs/rag libs/evals services/gateway services/api services/ingestion_worker services/eval_worker; do
             echo "== $m"
             (cd $m && uv run pytest -v)
           done

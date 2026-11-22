@@ -51,6 +51,8 @@ class MessageRead(BaseModel):
     token_count: int
     citations: list[CitationRead]
     usage: dict[str, Any] | None
+    # The current user's thumbs up (1) / down (-1) on an answer.
+    feedback: int | None = None
     created_at: datetime
 
 

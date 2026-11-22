@@ -105,7 +105,22 @@ def history_compact_queue(
 
 HISTORY_COMPACT = history_compact_queue()
 
-WORK_QUEUES: tuple[WorkQueue, ...] = (INGEST_DOCUMENTS, HISTORY_COMPACT)
+
+def eval_answers_queue(
+    exchange: str = "eval", retry_delays_ms: tuple[int, ...] = DEFAULT_RETRY_DELAYS_MS
+) -> WorkQueue:
+    """Online evaluation of sampled answers (LLM judge)."""
+    return WorkQueue(
+        name=f"{exchange}.answers",
+        exchange=exchange,
+        routing_key="answers.evaluate",
+        retry_delays_ms=retry_delays_ms,
+    )
+
+
+EVAL_ANSWERS = eval_answers_queue()
+
+WORK_QUEUES: tuple[WorkQueue, ...] = (INGEST_DOCUMENTS, HISTORY_COMPACT, EVAL_ANSWERS)
 
 
 @dataclass

@@ -34,10 +34,12 @@ known-first-party = [
     "platform_rag",
     "platform_graph",
     "platform_history",
+    "platform_evals",
     "llm_client",
     "platform_api",
     "gateway",
     "ingestion_worker",
+    "eval_worker",
 ]
 
 [tool.ruff.lint.flake8-bugbear]

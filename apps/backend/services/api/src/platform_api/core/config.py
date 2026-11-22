@@ -1,10 +1,15 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import SecretStr, model_validator
+from pydantic import Field, SecretStr, model_validator
 
 from platform_core.config import BaseServiceSettings
-from platform_messaging import WorkQueue, history_compact_queue, ingest_documents_queue
+from platform_messaging import (
+    WorkQueue,
+    eval_answers_queue,
+    history_compact_queue,
+    ingest_documents_queue,
+)
 
 DEV_JWT_SECRET = "dev-insecure-change-me-0123456789abcdef"
 
@@ -78,6 +83,12 @@ class Settings(BaseServiceSettings):
     history_exchange: str = "history"
     capsule_default_ttl_days: int | None = None
 
+    # Evaluation: this share of live answers is queued for the eval worker
+    # (0 disables online evals). EVAL_EXCHANGE must match the worker's.
+    eval_sample_rate: float = Field(default=0.2, ge=0, le=1)
+    eval_exchange: str = "eval"
+    judge_alias: str = "judge"
+
     # AI Gateway (internal)
     gateway_url: str = "http://localhost:8100"
     gateway_service_token: SecretStr = SecretStr("dev-gateway-token-change-me")
@@ -112,6 +123,9 @@ class Settings(BaseServiceSettings):
 
     def history_queue(self) -> WorkQueue:
         return history_compact_queue(self.history_exchange, self.ingest_retry_delays_ms)
+
+    def eval_queue(self) -> WorkQueue:
+        return eval_answers_queue(self.eval_exchange, self.ingest_retry_delays_ms)
 
     def ingest_queue(self) -> WorkQueue:
         return ingest_documents_queue(self.ingest_exchange, self.ingest_retry_delays_ms)

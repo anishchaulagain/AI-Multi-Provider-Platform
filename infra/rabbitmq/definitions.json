@@ -53,6 +53,33 @@
       "auto_delete": false,
       "internal": false,
       "arguments": {}
+    },
+    {
+      "name": "eval",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "eval.retry",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "eval.dlx",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
     }
   ],
   "queues": [
@@ -163,6 +190,60 @@
       "arguments": {
         "x-queue-type": "quorum"
       }
+    },
+    {
+      "name": "eval.answers",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-delivery-limit": 5,
+        "x-dead-letter-exchange": "eval.dlx",
+        "x-dead-letter-routing-key": "eval.dlq"
+      }
+    },
+    {
+      "name": "eval.answers.retry.10s",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-message-ttl": 10000,
+        "x-dead-letter-exchange": "eval",
+        "x-dead-letter-routing-key": "answers.evaluate"
+      }
+    },
+    {
+      "name": "eval.answers.retry.1m",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-message-ttl": 60000,
+        "x-dead-letter-exchange": "eval",
+        "x-dead-letter-routing-key": "answers.evaluate"
+      }
+    },
+    {
+      "name": "eval.answers.retry.10m",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-message-ttl": 600000,
+        "x-dead-letter-exchange": "eval",
+        "x-dead-letter-routing-key": "answers.evaluate"
+      }
+    },
+    {
+      "name": "eval.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
     }
   ],
   "bindings": [
@@ -244,6 +325,46 @@
       "destination": "history.dlq",
       "destination_type": "queue",
       "routing_key": "history.dlq",
+      "arguments": {}
+    },
+    {
+      "source": "eval",
+      "vhost": "/",
+      "destination": "eval.answers",
+      "destination_type": "queue",
+      "routing_key": "answers.evaluate",
+      "arguments": {}
+    },
+    {
+      "source": "eval.retry",
+      "vhost": "/",
+      "destination": "eval.answers.retry.10s",
+      "destination_type": "queue",
+      "routing_key": "eval.answers.retry.10s",
+      "arguments": {}
+    },
+    {
+      "source": "eval.retry",
+      "vhost": "/",
+      "destination": "eval.answers.retry.1m",
+      "destination_type": "queue",
+      "routing_key": "eval.answers.retry.1m",
+      "arguments": {}
+    },
+    {
+      "source": "eval.retry",
+      "vhost": "/",
+      "destination": "eval.answers.retry.10m",
+      "destination_type": "queue",
+      "routing_key": "eval.answers.retry.10m",
+      "arguments": {}
+    },
+    {
+      "source": "eval.dlx",
+      "vhost": "/",
+      "destination": "eval.dlq",
+      "destination_type": "queue",
+      "routing_key": "eval.dlq",
       "arguments": {}
     }
   ]

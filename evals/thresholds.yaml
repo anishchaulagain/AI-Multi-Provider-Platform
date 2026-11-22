@@ -1,0 +1,23 @@
+# Quality gates for `make eval` (platform_evals.cli). The run fails when a metric's
+# mean over the dataset is below its minimum. Metrics are 0..1.
+#
+# Calibrated against the free-tier model chains in infra/gateway/routes.yaml; raise
+# them as models improve, lower them only with a reason in the PR.
+
+# Sources considered for hit@k.
+k: 5
+
+answers:                      # LLM judge (`judge` alias), per answer
+  faithfulness: 0.80          # claims supported by the retrieved sources
+  answer_relevance: 0.75      # answers what was asked (abstentions excluded)
+  context_precision: 0.50     # relevant sources ranked first
+  citation_accuracy: 0.80     # cited sources support their sentence
+
+retrieval:                    # against the expected document in golden.jsonl
+  hit_at_k: 0.90              # expected document among the top-k sources
+  mrr: 0.75
+  term_recall: 0.80           # expected terms present in the answer
+  abstention_accuracy: 0.85   # "I don't know" exactly when the corpus has no answer
+
+history:                      # evals/datasets/history_*.jsonl (`--suite history`)
+  probe_accuracy: 0.90        # facts from early turns still recalled
